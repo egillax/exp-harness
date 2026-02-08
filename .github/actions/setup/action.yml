@@ -27,4 +27,3 @@ runs:
     - name: Install deps (locked)
       shell: bash
       run: uv sync --locked --dev
-
