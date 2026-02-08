@@ -1,0 +1,51 @@
+name: Docker Tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.8.22"
+          enable-cache: true
+
+      - name: Install deps (locked)
+        run: uv sync --locked --dev
+
+      - name: Docker info
+        run: docker info
+
+      - name: Pre-pull test image
+        run: docker pull python:3.12-slim
+
+      - name: Pytest (docker)
+        env:
+          RUN_EXPERIMENT_TEST_DOCKER: "1"
+        run: uv run pytest -q -m docker
+
+      - name: Prune uv cache
+        if: always()
+        run: uv cache prune --ci
+
