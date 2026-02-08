@@ -1,0 +1,30 @@
+name: setup
+description: Set up Python + uv and sync dependencies from uv.lock
+
+inputs:
+  python-version:
+    description: Python version to install
+    required: true
+  uv-version:
+    description: uv version to install
+    required: false
+    default: "0.8.22"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        version: ${{ inputs.uv-version }}
+        enable-cache: true
+
+    - name: Install deps (locked)
+      shell: bash
+      run: uv sync --locked --dev
+

@@ -23,6 +23,13 @@ CI / reproducible install (ensures `uv.lock` matches `pyproject.toml`):
 uv sync --dev --locked
 ```
 
+Install git hooks (recommended):
+
+```bash
+uv run pre-commit install
+uv run pre-commit run --all-files
+```
+
 Common commands:
 
 ```bash

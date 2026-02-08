@@ -20,19 +20,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Setup
+        uses: ./.github/actions/setup
         with:
           python-version: "3.12"
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "0.8.22"
-          enable-cache: true
-
-      - name: Install deps (locked)
-        run: uv sync --locked --dev
 
       - name: Ruff format (check)
         run: uv run ruff format --check --diff .
@@ -55,19 +46,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Setup
+        uses: ./.github/actions/setup
         with:
           python-version: ${{ matrix.python-version }}
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "0.8.22"
-          enable-cache: true
-
-      - name: Install deps (locked)
-        run: uv sync --locked --dev
 
       - name: Pytest
         run: uv run pytest -q --cov=exp_harness --cov-report=xml
@@ -82,4 +64,3 @@ jobs:
       - name: Prune uv cache
         if: always()
         run: uv cache prune --ci
-
