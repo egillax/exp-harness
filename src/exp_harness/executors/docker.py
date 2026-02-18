@@ -7,6 +7,7 @@ import subprocess
 import sys
 import time
 from contextlib import suppress
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -156,8 +157,9 @@ class DockerExecutor:
         image = docker.get("image")
         if not image:
             return True
-        first = int(list(ctx.allocated_gpus_host)[0])
-        argv = ["docker", "run", "--rm", "--gpus", f"device={first}", str(image), "true"]
+        # Probe with the full requested list. Some runtimes accept a single device but fail on a list.
+        gpu_list = ",".join(str(x) for x in list(ctx.allocated_gpus_host))
+        argv = ["docker", "run", "--rm", "--gpus", f"device={gpu_list}", str(image), "true"]
         proc = subprocess.run(
             argv,
             cwd=str(ctx.project_root),
@@ -170,6 +172,69 @@ class DockerExecutor:
         out = proc.stdout or ""
         # Unknown failure: keep the default behavior so the real error is visible later.
         return "cannot set both Count and DeviceIDs on device request" not in out
+
+    def _should_retry_gpu_mode_fallback(self, *, stderr_text: str, stdout_text: str) -> bool:
+        msg = "cannot set both Count and DeviceIDs on device request"
+        return (msg in (stderr_text or "")) or (msg in (stdout_text or ""))
+
+    def _run_docker_once(
+        self,
+        *,
+        docker_cmd: list[str],
+        cwd: Path,
+        step_dir: Path,
+        timeout_seconds: int | None,
+        stream_logs: bool,
+    ) -> tuple[int, bool]:
+        timed_out = False
+        stdout_fp = (step_dir / "stdout.log").open("wb")
+        stderr_fp = (step_dir / "stderr.log").open("wb")
+        try:
+            if not stream_logs:
+                proc = subprocess.Popen(
+                    docker_cmd, cwd=str(cwd), stdout=stdout_fp, stderr=stderr_fp
+                )
+                try:
+                    rc = proc.wait(timeout=timeout_seconds)
+                except subprocess.TimeoutExpired:
+                    timed_out = True
+                    proc.kill()
+                    rc = 124
+                    with suppress(Exception):
+                        proc.wait(timeout=5)
+            else:
+                proc = subprocess.Popen(
+                    docker_cmd,
+                    cwd=str(cwd),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                rc = self._stream_process(
+                    proc,
+                    stdout_fp=stdout_fp,
+                    stderr_fp=stderr_fp,
+                    timeout_seconds=timeout_seconds,
+                )
+                timed_out = rc == 124
+        finally:
+            stdout_fp.close()
+            stderr_fp.close()
+        return int(rc), bool(timed_out)
+
+    def _archive_attempt_files(self, *, step_dir: Path, attempt: int) -> None:
+        # Best-effort: keep first attempt logs/command for debugging.
+        suffix = f".attempt{attempt}"
+        for src_name, dst_name in [
+            ("command.txt", f"command{suffix}.txt"),
+            ("stdout.log", f"stdout{suffix}.log"),
+            ("stderr.log", f"stderr{suffix}.log"),
+            ("exec.json", f"exec{suffix}.json"),
+        ]:
+            src = step_dir / src_name
+            dst = step_dir / dst_name
+            if src.exists() and not dst.exists():
+                with suppress(Exception):
+                    src.rename(dst)
 
     def _docker_run_argv(
         self,
@@ -263,46 +328,62 @@ class DockerExecutor:
         timeout_seconds: int | None,
         step_artifacts_dir: str | None,
     ) -> StepResult:
+        started = utc_now_iso()
+        t0 = time.time()
+        attempt = 1
+
         docker_cmd = self._docker_run_argv(
             ctx, step_id=step_id, cmd=cmd, step_artifacts_dir=step_artifacts_dir
         )
         write_text(step_dir / "command.txt", " ".join(shlex.quote(x) for x in docker_cmd) + "\n")
+        rc, timed_out = self._run_docker_once(
+            docker_cmd=docker_cmd,
+            cwd=ctx.project_root,
+            step_dir=step_dir,
+            timeout_seconds=timeout_seconds,
+            stream_logs=ctx.stream_logs,
+        )
 
-        started = utc_now_iso()
-        t0 = time.time()
-        timed_out = False
-        stdout_fp = (step_dir / "stdout.log").open("wb")
-        stderr_fp = (step_dir / "stderr.log").open("wb")
-        try:
-            if not ctx.stream_logs:
-                proc = subprocess.Popen(
-                    docker_cmd, cwd=str(ctx.project_root), stdout=stdout_fp, stderr=stderr_fp
+        # Best-effort auto-fallback for hosts where `--gpus device=...` fails at runtime.
+        # Some runtimes only fail when passing a device list, so we also retry here even if
+        # the earlier probe passed.
+        if (
+            rc != 0
+            and not timed_out
+            and self._gpu_mode_requested(ctx) == "auto"
+            and "--gpus" in docker_cmd
+            and any(x.startswith("device=") for x in docker_cmd)
+        ):
+            stderr_text = ""
+            stdout_text = ""
+            with suppress(Exception):
+                stderr_text = (step_dir / "stderr.log").read_text(
+                    encoding="utf-8", errors="replace"
                 )
-                try:
-                    rc = proc.wait(timeout=timeout_seconds)
-                except subprocess.TimeoutExpired:
-                    timed_out = True
-                    proc.kill()
-                    rc = 124
-                    with suppress(Exception):
-                        proc.wait(timeout=5)
-            else:
-                proc = subprocess.Popen(
-                    docker_cmd,
-                    cwd=str(ctx.project_root),
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+            with suppress(Exception):
+                stdout_text = (step_dir / "stdout.log").read_text(
+                    encoding="utf-8", errors="replace"
                 )
-                rc = self._stream_process(
-                    proc,
-                    stdout_fp=stdout_fp,
-                    stderr_fp=stderr_fp,
+            if self._should_retry_gpu_mode_fallback(
+                stderr_text=stderr_text, stdout_text=stdout_text
+            ):
+                self._gpu_mode_selected = "nvidia_visible_devices"
+                attempt = 2
+                self._archive_attempt_files(step_dir=step_dir, attempt=1)
+                ctx2 = replace(ctx, env=dict(ctx.env))
+                docker_cmd = self._docker_run_argv(
+                    ctx2, step_id=step_id, cmd=cmd, step_artifacts_dir=step_artifacts_dir
+                )
+                write_text(
+                    step_dir / "command.txt", " ".join(shlex.quote(x) for x in docker_cmd) + "\n"
+                )
+                rc, timed_out = self._run_docker_once(
+                    docker_cmd=docker_cmd,
+                    cwd=ctx.project_root,
+                    step_dir=step_dir,
                     timeout_seconds=timeout_seconds,
+                    stream_logs=ctx.stream_logs,
                 )
-                timed_out = rc == 124
-        finally:
-            stdout_fp.close()
-            stderr_fp.close()
 
         finished = utc_now_iso()
         dt = time.time() - t0
@@ -323,6 +404,7 @@ class DockerExecutor:
                 "step_index": step_index,
                 "timeout_seconds": timeout_seconds,
                 "timed_out": timed_out,
+                "attempt": attempt,
             },
         )
         write_json(step_dir / "exec.json", result.__dict__)

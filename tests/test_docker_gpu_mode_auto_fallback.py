@@ -15,7 +15,7 @@ class _FakeProc:
 def test_gpu_mode_auto_falls_back_to_nvidia_visible_devices(monkeypatch, tmp_path: Path) -> None:
     def fake_run(argv, cwd=None, stdout=None, stderr=None, text=None):
         # Called by _supports_docker_gpus_device
-        if argv[:5] == ["docker", "run", "--rm", "--gpus", "device=2"]:
+        if argv[:5] == ["docker", "run", "--rm", "--gpus", "device=2,3"]:
             return _FakeProc(
                 returncode=1,
                 stdout="docker: Error response from daemon: cannot set both Count and DeviceIDs on device request\n",
