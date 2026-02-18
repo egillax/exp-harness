@@ -1,0 +1,6 @@
+extends: toy_base.yaml
+
+name: toy_overlay
+
+vars:
+  msg: bye

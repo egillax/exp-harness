@@ -6,7 +6,7 @@ from exp_harness.executors.base import RunContext
 from exp_harness.executors.docker import DockerExecutor
 
 
-def test_docker_argv_includes_runtime_knobs_and_env(tmp_path: Path) -> None:
+def test_docker_argv_includes_runtime_knobs_and_env(monkeypatch, tmp_path: Path) -> None:
     ctx = RunContext(
         name="n",
         run_key="k",
@@ -27,6 +27,8 @@ def test_docker_argv_includes_runtime_knobs_and_env(tmp_path: Path) -> None:
         allocated_gpus_host=[],
     )
     ex = DockerExecutor()
+    # Avoid the docker CLI even if future tests add allocated GPUs.
+    monkeypatch.setattr(ex, "_supports_docker_gpus_device", lambda _ctx: True)
     argv = ex._docker_run_argv(
         ctx, step_id="s", cmd=["echo", "hi"], step_artifacts_dir="/workspace/artifacts/n/k/s"
     )

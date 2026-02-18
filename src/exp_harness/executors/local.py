@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import os
+import selectors
 import shlex
 import subprocess
+import sys
 import time
 from contextlib import suppress
 from pathlib import Path
@@ -48,21 +50,34 @@ class LocalExecutor:
         stdout_fp = (step_dir / "stdout.log").open("wb")
         stderr_fp = (step_dir / "stderr.log").open("wb")
         try:
-            proc = subprocess.Popen(
-                cmd,
-                cwd=ctx.workdir,
-                env=env,
-                stdout=stdout_fp,
-                stderr=stderr_fp,
-            )
-            try:
-                rc = proc.wait(timeout=timeout_seconds)
-            except subprocess.TimeoutExpired:
-                timed_out = True
-                proc.kill()
-                rc = 124
-                with suppress(Exception):
-                    proc.wait(timeout=5)
+            if not ctx.stream_logs:
+                proc = subprocess.Popen(
+                    cmd,
+                    cwd=ctx.workdir,
+                    env=env,
+                    stdout=stdout_fp,
+                    stderr=stderr_fp,
+                )
+                try:
+                    rc = proc.wait(timeout=timeout_seconds)
+                except subprocess.TimeoutExpired:
+                    timed_out = True
+                    proc.kill()
+                    rc = 124
+                    with suppress(Exception):
+                        proc.wait(timeout=5)
+            else:
+                proc = subprocess.Popen(
+                    cmd,
+                    cwd=ctx.workdir,
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                rc = _stream_process(
+                    proc, stdout_fp=stdout_fp, stderr_fp=stderr_fp, timeout_seconds=timeout_seconds
+                )
+                timed_out = rc == 124
         finally:
             stdout_fp.close()
             stderr_fp.close()
@@ -89,3 +104,56 @@ class LocalExecutor:
 
     def finalize_run(self, _ctx: RunContext) -> None:
         return
+
+
+def _stream_process(
+    proc: subprocess.Popen[bytes],
+    *,
+    stdout_fp,
+    stderr_fp,
+    timeout_seconds: int | None,
+) -> int:
+    sel = selectors.DefaultSelector()
+    assert proc.stdout is not None
+    assert proc.stderr is not None
+    sel.register(proc.stdout, selectors.EVENT_READ, data=("stdout", stdout_fp, sys.stdout.buffer))
+    sel.register(proc.stderr, selectors.EVENT_READ, data=("stderr", stderr_fp, sys.stderr.buffer))
+
+    t0 = time.time()
+    killed = False
+    while sel.get_map():
+        if timeout_seconds is not None and (time.time() - t0) > timeout_seconds and not killed:
+            killed = True
+            with suppress(Exception):
+                proc.kill()
+
+        timeout = 1.0
+        if timeout_seconds is not None:
+            remaining = timeout_seconds - (time.time() - t0)
+            timeout = max(0.0, min(1.0, remaining))
+
+        events = sel.select(timeout)
+        if not events:
+            continue
+
+        for key, _ in events:
+            _, file_fp, live_fp = key.data
+            try:
+                chunk = os.read(key.fileobj.fileno(), 64 * 1024)
+            except Exception:
+                chunk = b""
+            if not chunk:
+                with suppress(Exception):
+                    sel.unregister(key.fileobj)
+                continue
+            file_fp.write(chunk)
+            file_fp.flush()
+            live_fp.write(chunk)
+            live_fp.flush()
+
+    with suppress(Exception):
+        proc.wait(timeout=5)
+
+    if killed:
+        return 124
+    return int(proc.returncode or 0)

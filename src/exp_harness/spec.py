@@ -20,6 +20,8 @@ class DockerConfig(_Model):
     shm_size: str | None = None
     ipc: Literal["host", "private"] | None = None
     network: Literal["none", "bridge"] | None = None
+    runtime: str | None = None
+    gpu_mode: Literal["auto", "docker_gpus_device", "nvidia_visible_devices", "none"] = "auto"
     allow_unverified_image: bool = False
 
 
@@ -64,5 +66,6 @@ class ExperimentSpec(_Model):
     env: EnvSpec = Field(default_factory=EnvSpec)
     resources: ResourcesSpec = Field(default_factory=ResourcesSpec)
     inputs: dict[str, InputSpec] = Field(default_factory=dict)
+    vars: dict[str, Any] = Field(default_factory=dict)
     params: dict[str, Any] = Field(default_factory=dict)
     steps: list[StepSpec]

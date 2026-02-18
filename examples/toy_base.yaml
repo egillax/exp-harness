@@ -1,0 +1,11 @@
+name: toy_base
+
+vars:
+  msg: hi
+
+steps:
+  - id: hello
+    cmd:
+      - python3
+      - -c
+      - "print('msg=${msg}')"

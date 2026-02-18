@@ -30,6 +30,7 @@ class RunContext:
     kind: str
     docker: dict[str, Any] | None
     allocated_gpus_host: list[int]
+    stream_logs: bool = False
 
 
 class Executor(Protocol):

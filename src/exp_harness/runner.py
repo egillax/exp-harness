@@ -37,7 +37,15 @@ from exp_harness.resolve import (
 from exp_harness.run_key import compute_run_key
 from exp_harness.spec import ExperimentSpec
 from exp_harness.store import get_run_paths, init_run_dirs, write_run_json
-from exp_harness.utils import ensure_dir, resolve_relpath, utc_now_iso, write_json
+from exp_harness.utils import (
+    ensure_dir,
+    iso_to_compact_utc,
+    resolve_relpath,
+    safe_symlink,
+    tail_text_lines,
+    utc_now_iso,
+    write_json,
+)
 
 HF_OFFLINE_VARS: dict[str, str] = {
     "TRANSFORMERS_OFFLINE": "1",
@@ -146,6 +154,8 @@ def run_experiment(
     set_string_overrides: list[tuple[str, str]],
     salt: str | None,
     enforce_clean: bool,
+    follow_steps: bool = False,
+    stderr_tail_lines: int = 120,
 ) -> dict[str, str]:
     raw_base = load_and_validate(
         spec_path=spec_path,
@@ -285,6 +295,18 @@ def run_experiment(
     write_json(paths.run_dir / "resolved_spec.json", resolved_final)
 
     started_at = utc_now_iso()
+    started_at_compact = iso_to_compact_utc(started_at)
+
+    # Create a time-indexed alias to make it easier to find runs on disk.
+    # This does not affect the stable run_key (hash) used for identity/deduping.
+    safe_symlink(
+        link_path=roots.runs_root / name / "_by_time" / f"{started_at_compact}_{run_key}",
+        target_path=paths.run_dir,
+    )
+    safe_symlink(
+        link_path=roots.artifacts_root / name / "_by_time" / f"{started_at_compact}_{run_key}",
+        target_path=paths.artifacts_dir,
+    )
     run_json: dict[str, Any] = {
         "name": name,
         "run_key": run_key,
@@ -354,7 +376,13 @@ def run_experiment(
     except Exception as e:
         run_json["state"] = "failed"
         run_json["finished_at_utc"] = utc_now_iso()
-        run_json["error"] = {"message": str(e), "traceback": traceback.format_exc()}
+        existing = run_json.get("error")
+        if isinstance(existing, dict):
+            existing.setdefault("message", str(e))
+            existing["traceback"] = traceback.format_exc()
+            run_json["error"] = existing
+        else:
+            run_json["error"] = {"message": str(e), "traceback": traceback.format_exc()}
         write_run_json(paths, run_json)
         raise
 
@@ -374,6 +402,7 @@ def run_experiment(
                 kind=kind,
                 docker=docker_block,
                 allocated_gpus_host=allocation.gpu_ids,
+                stream_logs=bool(follow_steps),
             )
         else:
             executor = LocalExecutor()
@@ -389,6 +418,7 @@ def run_experiment(
                 kind=kind,
                 docker=None,
                 allocated_gpus_host=allocation.gpu_ids,
+                stream_logs=bool(follow_steps),
             )
 
         executor.prepare_run(ctx)
@@ -416,6 +446,31 @@ def run_experiment(
             run_json["steps"].append({"step_id": step_id, "rc": result.rc, "dir": str(step_dir)})
             write_run_json(paths, run_json)
             if result.rc != 0:
+                stderr_fp = step_dir / "stderr.log"
+                stdout_fp = step_dir / "stdout.log"
+                tail = tail_text_lines(stderr_fp, n=int(stderr_tail_lines))
+                if tail:
+                    print("", file=sys.stderr)
+                    print(f"[exp-harness] step failed: {step_id} (rc={result.rc})", file=sys.stderr)
+                    print(f"[exp-harness] command: {step_dir / 'command.txt'}", file=sys.stderr)
+                    print(f"[exp-harness] stderr:  {stderr_fp}", file=sys.stderr)
+                    print(f"[exp-harness] stdout:  {stdout_fp}", file=sys.stderr)
+                    print(
+                        f"[exp-harness] stderr tail (last {stderr_tail_lines} lines):",
+                        file=sys.stderr,
+                    )
+                    print(tail.rstrip("\n"), file=sys.stderr)
+                    print("", file=sys.stderr)
+                run_json.setdefault("error", {})
+                run_json["error"] = {
+                    "message": f"Step failed: {step_id} (rc={result.rc})",
+                    "step_id": step_id,
+                    "rc": int(result.rc),
+                    "stderr_tail": tail,
+                    "stderr_log": str(stderr_fp),
+                    "stdout_log": str(stdout_fp),
+                }
+                write_run_json(paths, run_json)
                 raise RuntimeError(f"Step failed: {step_id} (rc={result.rc})")
 
         executor.finalize_run(ctx)
@@ -430,7 +485,13 @@ def run_experiment(
     except Exception as e:
         run_json["state"] = "failed"
         run_json["finished_at_utc"] = utc_now_iso()
-        run_json["error"] = {"message": str(e), "traceback": traceback.format_exc()}
+        existing = run_json.get("error")
+        if isinstance(existing, dict):
+            existing.setdefault("message", str(e))
+            existing["traceback"] = traceback.format_exc()
+            run_json["error"] = existing
+        else:
+            run_json["error"] = {"message": str(e), "traceback": traceback.format_exc()}
         write_run_json(paths, run_json)
         raise
     finally:

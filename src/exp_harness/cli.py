@@ -55,6 +55,21 @@ def run(
     enforce_clean: Annotated[
         bool, typer.Option("--enforce-clean", help="Fail if git working tree is dirty")
     ] = False,
+    follow_steps: Annotated[
+        bool,
+        typer.Option(
+            "--follow-steps",
+            "--follow",
+            help="Stream step stdout/stderr to the terminal while running (still writes stdout.log/stderr.log).",
+        ),
+    ] = False,
+    stderr_tail_lines: Annotated[
+        int,
+        typer.Option(
+            "--stderr-tail-lines",
+            help="On step failure, print the last N lines of stderr.log (0 disables).",
+        ),
+    ] = 120,
 ) -> None:
     """
     Run a multi-step experiment from a YAML spec.
@@ -76,6 +91,8 @@ def run(
         set_string_overrides=set_str_kv,
         salt=salt,
         enforce_clean=enforce_clean,
+        follow_steps=follow_steps,
+        stderr_tail_lines=stderr_tail_lines,
     )
     typer.echo(f"{res['name']} {res['run_key']}")
     typer.echo(f"run_dir: {res['run_dir']}")

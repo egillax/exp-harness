@@ -10,13 +10,13 @@ params:
 steps:
   - id: hello
     cmd:
-      - python
+      - python3
       - -c
       - "import os; print('run_key='+os.environ.get('EXP_HARNESS_RUN_KEY','')); print('msg=${params.msg}')"
 
   - id: write_artifact
     needs: [hello]
     cmd:
-      - python
+      - python3
       - -c
       - "from pathlib import Path; import os; p=Path(os.environ['EXP_HARNESS_STEP_ARTIFACTS_DIR']); p.mkdir(parents=True, exist_ok=True); (p/'out.txt').write_text('ok\\n')"

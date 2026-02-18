@@ -32,6 +32,56 @@ def ensure_dir(p: Path) -> None:
     p.mkdir(parents=True, exist_ok=True)
 
 
+def iso_to_compact_utc(ts: str) -> str:
+    """
+    Convert an ISO8601-ish UTC timestamp (e.g. 2026-02-13T14:00:01Z) to a compact form
+    suitable for directory names: 20260213T140001Z.
+    """
+    try:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        return dt.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
+    except Exception:
+        digits = re.sub(r"[^0-9]", "", ts)
+        if len(digits) >= 14:
+            return f"{digits[:8]}T{digits[8:14]}Z"
+        return ts.replace(":", "").replace("-", "").replace(".", "")
+
+
+def tail_text_lines(p: Path, *, n: int, max_bytes: int = 256_000) -> str:
+    """
+    Best-effort tail of the last N lines of a (potentially large) text file.
+    Returns UTF-8 decoded text with replacement on decode errors.
+    """
+    if n <= 0:
+        return ""
+    try:
+        size = p.stat().st_size
+        read_sz = min(size, max_bytes)
+        with p.open("rb") as f:
+            f.seek(-read_sz, os.SEEK_END)
+            data = f.read(read_sz)
+        text = data.decode("utf-8", errors="replace")
+        lines = text.splitlines()
+        return "\n".join(lines[-n:]) + ("\n" if lines else "")
+    except Exception:
+        return ""
+
+
+def safe_symlink(*, link_path: Path, target_path: Path) -> None:
+    """
+    Create a relative symlink if missing; if it already exists, do nothing.
+    Never overwrites an existing non-symlink path.
+    """
+    link_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if link_path.is_symlink():
+        return
+    if link_path.exists():
+        return
+    rel = os.path.relpath(str(target_path), start=str(link_path.parent))
+    link_path.symlink_to(rel)
+
+
 def write_text(p: Path, text: str) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(text, encoding="utf-8")

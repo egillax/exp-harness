@@ -28,8 +28,10 @@ def _ctx(tmp_path: Path) -> RunContext:
     )
 
 
-def test_docker_argv_does_not_force_cuda_visible_devices(tmp_path: Path) -> None:
+def test_docker_argv_does_not_force_cuda_visible_devices(monkeypatch, tmp_path: Path) -> None:
     ex = DockerExecutor()
+    # Avoid hitting the real docker CLI from unit tests.
+    monkeypatch.setattr(ex, "_supports_docker_gpus_device", lambda _ctx: True)
     ctx = _ctx(tmp_path)
     argv = ex._docker_run_argv(ctx, step_id="s", cmd=["echo", "hi"], step_artifacts_dir=None)
     s = "\n".join(argv)

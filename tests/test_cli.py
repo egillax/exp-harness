@@ -37,10 +37,16 @@ def test_cli_run_status_logs_inspect_and_locks_gc(tmp_path: Path) -> None:
             str(artifacts_root),
             "--salt",
             "s",
+            "--follow-steps",
+            "--stderr-tail-lines",
+            "0",
         ],
     )
     assert res.exit_code == 0, res.stdout + res.stderr
-    parts = res.stdout.splitlines()[0].split()
+    lines = res.stdout.splitlines()
+    summary = next((ln for ln in lines if ln.startswith("cli ")), "")
+    assert summary, f"missing summary line in stdout:\n{res.stdout}"
+    parts = summary.split()
     assert parts[0] == "cli"
     run_key = parts[1]
 

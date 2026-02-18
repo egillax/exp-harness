@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import os
+import selectors
 import shlex
 import subprocess
+import sys
 import time
 from contextlib import suppress
 from pathlib import Path
@@ -15,12 +18,19 @@ from exp_harness.utils import resolve_relpath, utc_now_iso, write_json, write_te
 class DockerExecutor:
     def __init__(self) -> None:
         self._image_meta: dict[str, Any] | None = None
+        self._gpu_mode_selected: str | None = None
 
     def prepare_run(self, ctx: RunContext) -> None:
         docker = ctx.docker or {}
         image = docker.get("image")
         if image:
             self._image_meta = inspect_image(image=str(image), cwd=ctx.project_root)
+        self._write_mount_provenance(ctx)
+        self._probe_mounts(ctx)
+
+        # Cache a GPU mode decision for this run (best-effort).
+        if ctx.allocated_gpus_host and (docker.get("gpu_mode") or "auto") == "auto":
+            _ = self._resolve_gpu_mode(ctx)
         # Capture python/pip provenance from inside the container environment (best-effort).
         try:
             prov_dir = ctx.run_dir / "provenance"
@@ -31,6 +41,49 @@ class DockerExecutor:
             freeze = self._probe(ctx, ["python", "-m", "pip", "freeze"])
             if freeze is not None:
                 write_text(prov_dir / "pip_freeze.txt", freeze)
+        except Exception:
+            return
+
+    def _write_mount_provenance(self, ctx: RunContext) -> None:
+        try:
+            docker = ctx.docker or {}
+            mounts = docker.get("mounts")
+            if mounts is None:
+                return
+            prov_dir = ctx.run_dir / "provenance"
+            prov_dir.mkdir(parents=True, exist_ok=True)
+
+            resolved: list[dict[str, Any]] = []
+            for m in mounts:
+                host_p = resolve_relpath(str(m["host"]), base_dir=ctx.project_root)
+                resolved.append(
+                    {
+                        "host": str(host_p),
+                        "host_exists": bool(host_p.exists()),
+                        "container": str(m["container"]),
+                    }
+                )
+            write_json(prov_dir / "docker_mounts.json", resolved)
+        except Exception:
+            return
+
+    def _probe_mounts(self, ctx: RunContext) -> None:
+        try:
+            prov_dir = ctx.run_dir / "provenance"
+            prov_dir.mkdir(parents=True, exist_ok=True)
+            out = self._probe(
+                ctx,
+                [
+                    "sh",
+                    "-lc",
+                    "pwd; ls -la /workspace || true; "
+                    "echo '--- /workspace/runs'; ls -la /workspace/runs || true; "
+                    "echo '--- /workspace/artifacts'; ls -la /workspace/artifacts || true; "
+                    "echo '--- /workspace/artifacts/tensorized'; ls -la /workspace/artifacts/tensorized || true",
+                ],
+            )
+            if out:
+                write_text(prov_dir / "docker_mount_check.txt", out)
         except Exception:
             return
 
@@ -69,6 +122,54 @@ class DockerExecutor:
             text=True,
         )
         return proc.stdout
+
+    def _gpu_mode_requested(self, ctx: RunContext) -> str:
+        docker = ctx.docker or {}
+        mode = str(docker.get("gpu_mode") or "auto").strip().lower()
+        if mode in {"auto", "docker_gpus_device", "nvidia_visible_devices", "none"}:
+            return mode
+        raise RuntimeError(f"invalid env.docker.gpu_mode: {mode!r}")
+
+    def _resolve_gpu_mode(self, ctx: RunContext) -> str:
+        mode = self._gpu_mode_requested(ctx)
+        if mode != "auto":
+            return mode
+        if not ctx.allocated_gpus_host:
+            return "none"
+        if self._gpu_mode_selected:
+            return self._gpu_mode_selected
+
+        # Default preference: the native docker GPU device selector.
+        supported = self._supports_docker_gpus_device(ctx)
+        self._gpu_mode_selected = "docker_gpus_device" if supported else "nvidia_visible_devices"
+        return self._gpu_mode_selected
+
+    def _supports_docker_gpus_device(self, ctx: RunContext) -> bool:
+        """
+        Detect whether `docker run --gpus device=...` works on this host/runtime.
+
+        Some Docker/NVIDIA runtime combinations error with:
+          "cannot set both Count and DeviceIDs on device request"
+        In that case, we fall back to NVIDIA_VISIBLE_DEVICES.
+        """
+        docker = ctx.docker or {}
+        image = docker.get("image")
+        if not image:
+            return True
+        first = int(list(ctx.allocated_gpus_host)[0])
+        argv = ["docker", "run", "--rm", "--gpus", f"device={first}", str(image), "true"]
+        proc = subprocess.run(
+            argv,
+            cwd=str(ctx.project_root),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        if proc.returncode == 0:
+            return True
+        out = proc.stdout or ""
+        # Unknown failure: keep the default behavior so the real error is visible later.
+        return "cannot set both Count and DeviceIDs on device request" not in out
 
     def _docker_run_argv(
         self,
@@ -118,13 +219,33 @@ class DockerExecutor:
         if step_artifacts_dir:
             env["EXP_HARNESS_STEP_ARTIFACTS_DIR"] = str(step_artifacts_dir)
 
-        for k, v in env.items():
-            argv += ["-e", f"{k}={v}"]
-
         allocated_host = list(ctx.allocated_gpus_host)
         if allocated_host:
-            argv += ["--gpus", "device=" + ",".join(str(x) for x in allocated_host)]
-            argv += ["-e", "EXP_HARNESS_HOST_GPU_IDS=" + ",".join(str(x) for x in allocated_host)]
+            mode = self._resolve_gpu_mode(ctx)
+            gpu_list = ",".join(str(x) for x in allocated_host)
+            if mode == "docker_gpus_device":
+                argv += ["--gpus", "device=" + gpu_list]
+                env["EXP_HARNESS_HOST_GPU_IDS"] = gpu_list
+            elif mode == "nvidia_visible_devices":
+                runtime = str(docker.get("runtime") or "nvidia").strip()
+                if runtime:
+                    argv += [f"--runtime={runtime}"]
+
+                # Constrain which host GPUs are exposed to the container.
+                # Note: inside the container, these typically get re-indexed to 0..N-1.
+                env.setdefault("NVIDIA_VISIBLE_DEVICES", gpu_list)
+                env.setdefault("NVIDIA_DRIVER_CAPABILITIES", "compute,utility")
+                env.setdefault(
+                    "CUDA_VISIBLE_DEVICES", ",".join(str(i) for i in range(len(allocated_host)))
+                )
+                env["EXP_HARNESS_HOST_GPU_IDS"] = gpu_list
+            elif mode == "none":
+                pass
+            else:
+                raise RuntimeError(f"unexpected gpu mode: {mode!r}")
+
+        for k, v in env.items():
+            argv += ["-e", f"{k}={v}"]
 
         argv += ["-w", ctx.workdir]
         argv.append(str(image))
@@ -153,17 +274,32 @@ class DockerExecutor:
         stdout_fp = (step_dir / "stdout.log").open("wb")
         stderr_fp = (step_dir / "stderr.log").open("wb")
         try:
-            proc = subprocess.Popen(
-                docker_cmd, cwd=str(ctx.project_root), stdout=stdout_fp, stderr=stderr_fp
-            )
-            try:
-                rc = proc.wait(timeout=timeout_seconds)
-            except subprocess.TimeoutExpired:
-                timed_out = True
-                proc.kill()
-                rc = 124
-                with suppress(Exception):
-                    proc.wait(timeout=5)
+            if not ctx.stream_logs:
+                proc = subprocess.Popen(
+                    docker_cmd, cwd=str(ctx.project_root), stdout=stdout_fp, stderr=stderr_fp
+                )
+                try:
+                    rc = proc.wait(timeout=timeout_seconds)
+                except subprocess.TimeoutExpired:
+                    timed_out = True
+                    proc.kill()
+                    rc = 124
+                    with suppress(Exception):
+                        proc.wait(timeout=5)
+            else:
+                proc = subprocess.Popen(
+                    docker_cmd,
+                    cwd=str(ctx.project_root),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                rc = self._stream_process(
+                    proc,
+                    stdout_fp=stdout_fp,
+                    stderr_fp=stderr_fp,
+                    timeout_seconds=timeout_seconds,
+                )
+                timed_out = rc == 124
         finally:
             stdout_fp.close()
             stderr_fp.close()
@@ -191,6 +327,68 @@ class DockerExecutor:
         )
         write_json(step_dir / "exec.json", result.__dict__)
         return result
+
+    def _stream_process(
+        self,
+        proc: subprocess.Popen[bytes],
+        *,
+        stdout_fp,
+        stderr_fp,
+        timeout_seconds: int | None,
+    ) -> int:
+        sel = selectors.DefaultSelector()
+        assert proc.stdout is not None
+        assert proc.stderr is not None
+        sel.register(
+            proc.stdout, selectors.EVENT_READ, data=("stdout", stdout_fp, sys.stdout.buffer)
+        )
+        sel.register(
+            proc.stderr, selectors.EVENT_READ, data=("stderr", stderr_fp, sys.stderr.buffer)
+        )
+
+        t0 = time.time()
+        killed = False
+        while sel.get_map():
+            if timeout_seconds is not None and (time.time() - t0) > timeout_seconds and not killed:
+                killed = True
+                with suppress(Exception):
+                    proc.kill()
+
+            timeout = 1.0
+            if timeout_seconds is not None:
+                remaining = timeout_seconds - (time.time() - t0)
+                timeout = max(0.0, min(1.0, remaining))
+
+            events = sel.select(timeout)
+            if not events:
+                if proc.poll() is not None and not sel.get_map():
+                    break
+                continue
+
+            for key, _ in events:
+                stream_name, file_fp, live_fp = key.data
+                try:
+                    chunk = os.read(key.fileobj.fileno(), 64 * 1024)
+                except Exception:
+                    chunk = b""
+                if not chunk:
+                    with suppress(Exception):
+                        sel.unregister(key.fileobj)
+                    continue
+
+                file_fp.write(chunk)
+                file_fp.flush()
+                # Always stream when ctx.stream_logs is true; stdout/stderr keep their destinations.
+                live_fp.write(chunk)
+                live_fp.flush()
+
+        # Drain any remaining output quickly after process exit/kill.
+        with suppress(Exception):
+            proc.wait(timeout=5)
+
+        if killed:
+            return 124
+        return int(proc.returncode or 0)
 
     def finalize_run(self, _ctx: RunContext) -> None:
         return

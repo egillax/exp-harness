@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from exp_harness.executors.base import RunContext
@@ -59,6 +60,8 @@ def test_docker_prepare_run_writes_python_and_freeze(monkeypatch, tmp_path: Path
     ex.prepare_run(ctx)
 
     prov = run_dir / "provenance"
+    mounts = json.loads((prov / "docker_mounts.json").read_text(encoding="utf-8"))
+    assert mounts and mounts[0]["host_exists"] is True
     assert (prov / "python.txt").read_text(encoding="utf-8").startswith("Python")
     assert (prov / "pip_freeze.txt").read_text(encoding="utf-8") == "a==1\n"
     # Ensure we attempted docker run for both probes.
