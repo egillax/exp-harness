@@ -35,5 +35,15 @@ def test_allocate_gpus_explicit_ids_requires_detection(
     pool = GpuPool(locks_dir=tmp_path / "locks")
     monkeypatch.setattr(pool, "detect_gpu_count", lambda: 0)
 
+    alloc = allocate_gpus(pool, [0], run_path="x", run_key="y", name="z")
+    assert alloc.gpu_ids == [0]
+
+
+def test_allocate_gpus_integer_request_requires_detection(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    pool = GpuPool(locks_dir=tmp_path / "locks")
+    monkeypatch.setattr(pool, "detect_gpu_count", lambda: 0)
+
     with pytest.raises(RuntimeError, match=r"No GPUs detected"):
-        allocate_gpus(pool, [0], run_path="x", run_key="y", name="z")
+        allocate_gpus(pool, 1, run_path="x", run_key="y", name="z")

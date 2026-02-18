@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -151,13 +152,23 @@ def allocate_gpus(
         candidates = list(request)
         if want == 0:
             return Allocation(gpu_ids=[], pid=os.getpid())
+        if any(x < 0 for x in candidates):
+            raise RuntimeError(f"Requested GPU ids must be non-negative: {candidates}")
+        if len(set(candidates)) != len(candidates):
+            raise RuntimeError(f"Requested GPU ids contain duplicates: {candidates}")
+
+        # If nvidia-smi isn't available (common in Docker-outside-of-Docker runners), we can't
+        # validate the GPU id range. Still allow explicit ids, since the user may know which ids
+        # exist on the host. The study container launch will fail later if the ids are invalid.
         if count == 0:
-            raise RuntimeError(
-                "No GPUs detected (nvidia-smi not available), but explicit GPU ids were requested"
+            print(
+                f"warning: nvidia-smi not available; skipping GPU id range validation for explicit request: {candidates}",
+                file=sys.stderr,
             )
-        bad = [x for x in candidates if x < 0 or x >= count]
-        if bad:
-            raise RuntimeError(f"Requested GPU ids out of range (0..{count - 1}): {bad}")
+        else:
+            bad = [x for x in candidates if x >= count]
+            if bad:
+                raise RuntimeError(f"Requested GPU ids out of range (0..{count - 1}): {bad}")
 
     acquired: list[int] = []
     pid = os.getpid()
