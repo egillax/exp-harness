@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Docker-outside-of-Docker wrapper for exp-harness.
+#
+# Copy this script into a project root as `run-experiment` to use exp-harness without installing it on the host.
+#
+# Critical detail: mount the project directory into the runner container at the SAME absolute path as the host,
+# otherwise exp-harness will generate bind mounts the host Docker daemon can't resolve.
+
+HARNESS_IMAGE="${HARNESS_IMAGE:-exp-harness-runner:local}"
+
+DOCKER_SOCK="${DOCKER_SOCK:-}"
+if [[ -z "${DOCKER_SOCK}" ]]; then
+  if [[ -S /var/run/docker.sock ]]; then
+    DOCKER_SOCK="/var/run/docker.sock"
+  elif [[ -n "${XDG_RUNTIME_DIR:-}" && -S "${XDG_RUNTIME_DIR}/docker.sock" ]]; then
+    DOCKER_SOCK="${XDG_RUNTIME_DIR}/docker.sock"
+  else
+    echo "error: docker socket not found. Set DOCKER_SOCK=/path/to/docker.sock" >&2
+    exit 1
+  fi
+fi
+
+HOST_PWD="$(pwd -P)"
+
+TTY_ARGS=()
+if [[ -t 0 ]]; then
+  TTY_ARGS=(-t)
+fi
+
+ENV_FILE_ARGS=()
+if [[ -f "${HOST_PWD}/.env" ]]; then
+  ENV_FILE_ARGS=(--env-file "${HOST_PWD}/.env")
+fi
+
+ENV_ARGS=()
+if [[ -n "${RUN_EXPERIMENT_RUNS_ROOT:-}" ]]; then
+  ENV_ARGS+=(-e "RUN_EXPERIMENT_RUNS_ROOT=${RUN_EXPERIMENT_RUNS_ROOT}")
+fi
+if [[ -n "${RUN_EXPERIMENT_ARTIFACTS_ROOT:-}" ]]; then
+  ENV_ARGS+=(-e "RUN_EXPERIMENT_ARTIFACTS_ROOT=${RUN_EXPERIMENT_ARTIFACTS_ROOT}")
+fi
+
+exec docker run --rm -i "${TTY_ARGS[@]}" \
+  -v "${DOCKER_SOCK}:/var/run/docker.sock" \
+  -v "${HOST_PWD}:${HOST_PWD}" \
+  -w "${HOST_PWD}" \
+  "${ENV_FILE_ARGS[@]}" \
+  "${ENV_ARGS[@]}" \
+  "${HARNESS_IMAGE}" \
+  "$@"

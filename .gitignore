@@ -5,3 +5,8 @@ __pycache__/
 .ruff_cache/
 .coverage
 htmlcov/
+
+# Local build outputs
+wheelhouse/
+requirements.txt
+requirements.deps.txt

@@ -189,3 +189,15 @@ each run also creates a symlink under:
 - Default test run (fast, no docker/slow): `uv run pytest`
 - Docker tests (requires Docker): `RUN_EXPERIMENT_TEST_DOCKER=1 uv run pytest -m docker`
 - Slow/concurrency tests: `RUN_EXPERIMENT_TEST_SLOW=1 uv run pytest -m slow`
+
+## Runner container (Docker-outside-of-Docker)
+
+If you don't want to install exp-harness on the host (e.g. air-gapped servers), you can run it from a small
+"runner" container that mounts the host Docker socket and launches study containers via the host Docker
+daemon.
+
+Important: mounting `/var/run/docker.sock` gives the container root-equivalent control of the host via Docker.
+
+- Runner image Dockerfile: `docker/exp-harness-runner/Dockerfile`
+- Build helper: `scripts/docker_build_runner_image.sh`
+- Host wrapper template: `scripts/run-experiment-dood` (copy into a project as `run-experiment`)
