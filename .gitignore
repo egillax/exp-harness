@@ -10,3 +10,6 @@ htmlcov/
 wheelhouse/
 requirements.txt
 requirements.deps.txt
+
+# Runner build artifacts
+docker/exp-harness-runner/wheels/*.whl

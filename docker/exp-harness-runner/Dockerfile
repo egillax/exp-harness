@@ -11,6 +11,7 @@ RUN --mount=type=cache,target=/var/cache/apt \
     apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates \
       docker.io \
+      git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/exp-harness

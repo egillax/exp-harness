@@ -95,14 +95,19 @@ def write_json(p: Path, data: Any) -> None:
 def shell_out(
     argv: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None
 ) -> tuple[int, str, str]:
-    proc = subprocess.run(
-        argv,
-        cwd=str(cwd) if cwd else None,
-        env=env,
-        capture_output=True,
-        text=True,
-    )
-    return proc.returncode, proc.stdout, proc.stderr
+    try:
+        proc = subprocess.run(
+            argv,
+            cwd=str(cwd) if cwd else None,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        return proc.returncode, proc.stdout, proc.stderr
+    except FileNotFoundError as e:
+        # For optional tooling (git, docker, nvidia-smi), treat missing executables as a non-zero rc
+        # rather than crashing the entire run.
+        return 127, "", str(e)
 
 
 def which(cmd: str) -> str | None:
