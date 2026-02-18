@@ -12,6 +12,7 @@ This script:
 
 Usage:
   scripts/docker_build_runner_image.sh [--tag exp-harness-runner:local]
+  scripts/docker_build_runner_image.sh [-t exp-harness-runner:local]
 USAGE
 }
 
@@ -19,9 +20,17 @@ TAG="exp-harness-runner:local"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    -t)
+      TAG="${2:-}"
+      shift 2
+      ;;
     --tag)
       TAG="${2:-}"
       shift 2
+      ;;
+    --tag=*)
+      TAG="${1#*=}"
+      shift 1
       ;;
     -h|--help)
       usage
@@ -34,6 +43,12 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -z "${TAG}" ]]; then
+  echo "error: --tag/-t requires a non-empty value" >&2
+  usage
+  exit 2
+fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 WHEELS_DIR="${ROOT}/docker/exp-harness-runner/wheels"
