@@ -9,6 +9,7 @@ from typing import Any
 import yaml
 
 from exp_harness.config import Roots
+from exp_harness.store import resolve_run_dir
 
 
 def tmp_roots(tmp_path: Path) -> Roots:
@@ -28,7 +29,10 @@ def write_spec(project_root: Path, data: dict[str, Any], *, name: str = "spec.ya
 
 
 def read_run_json(roots: Roots, name: str, run_key: str) -> dict[str, Any]:
-    fp = roots.runs_root / name / run_key / "run.json"
+    run_dir = resolve_run_dir(roots=roots, name=name, run_key=run_key)
+    if run_dir is None:
+        raise FileNotFoundError(f"run not found: name={name} run_key={run_key}")
+    fp = run_dir / "run.json"
     return json.loads(fp.read_text(encoding="utf-8"))
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import os
+import re
 import shutil
 import sys
 import traceback
@@ -36,12 +37,16 @@ from exp_harness.resolve import (
 )
 from exp_harness.run_key import compute_run_key
 from exp_harness.spec import ExperimentSpec
-from exp_harness.store import get_run_paths, init_run_dirs, write_run_json
+from exp_harness.store import (
+    get_run_paths,
+    init_run_dirs,
+    resolve_run_dir,
+    write_run_json,
+    write_run_key_index,
+)
 from exp_harness.utils import (
     ensure_dir,
-    iso_to_compact_utc,
     resolve_relpath,
-    safe_symlink,
     tail_text_lines,
     utc_now_iso,
     write_json,
@@ -52,6 +57,22 @@ HF_OFFLINE_VARS: dict[str, str] = {
     "HF_HUB_OFFLINE": "1",
     "HF_DATASETS_OFFLINE": "1",
 }
+
+
+def _sanitize_run_label(value: str, *, fallback: str = "run", max_len: int = 48) -> str:
+    s = re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip().lower())
+    s = re.sub(r"-{2,}", "-", s).strip("-._")
+    if not s:
+        return fallback
+    return s[:max_len]
+
+
+def _format_run_id(*, started_at_utc: str, run_label: str, run_key: str) -> str:
+    # 2026-02-24T12:48:53Z -> 20260224-124853Z
+    ts = started_at_utc.replace("-", "").replace(":", "")
+    ts = ts.replace("T", "-")
+    label = _sanitize_run_label(run_label)
+    return f"{ts}__{label}__{run_key[:8]}"
 
 
 def _proc_start_ticks_linux(pid: int) -> int | None:
@@ -153,6 +174,7 @@ def run_experiment(
     set_overrides: list[tuple[str, str]],
     set_string_overrides: list[tuple[str, str]],
     salt: str | None,
+    run_label: str | None = None,
     enforce_clean: bool,
     follow_steps: bool = False,
     stderr_tail_lines: int = 120,
@@ -165,9 +187,15 @@ def run_experiment(
     kind = (raw_base.get("env") or {}).get("kind", "local")
     raw_base = apply_computed_defaults(raw_base, project_root=roots.project_root, kind=kind)
     name = str(raw_base.get("name"))
+    spec_run_label = raw_base.get("run_label")
+    label_from_spec = str(spec_run_label) if isinstance(spec_run_label, str) else None
+    effective_run_label = run_label or label_from_spec or spec_path.stem
 
     raw_hash = copy.deepcopy(raw_base)
     raw_runtime = copy.deepcopy(raw_base)
+
+    # run_label is UX metadata and should not affect run identity/hash.
+    raw_hash.pop("run_label", None)
 
     # Apply effective defaults that affect run_key hashing.
     env_block_hash = dict(raw_hash.get("env") or {})
@@ -262,19 +290,30 @@ def run_experiment(
     }
     run_key = compute_run_key(run_key_material)
 
-    paths = get_run_paths(roots=roots, name=name, run_key=run_key)
+    existing_run_dir = resolve_run_dir(roots=roots, name=name, run_key=run_key)
+    if existing_run_dir is not None:
+        raise RuntimeError(f"Run already exists: {existing_run_dir} (use --salt for a new run)")
+
+    started_at = utc_now_iso()
+    run_id = _format_run_id(
+        started_at_utc=started_at, run_label=effective_run_label, run_key=run_key
+    )
+    paths = get_run_paths(roots=roots, name=name, run_id=run_id)
     if paths.run_dir.exists():
-        raise RuntimeError(f"Run already exists: {paths.run_dir} (use --salt for a new run)")
+        raise RuntimeError(
+            f"Run directory already exists: {paths.run_dir} (use --salt or a different --run-label)"
+        )
 
     init_run_dirs(paths)
     ensure_dir(paths.artifacts_dir)
+    write_run_key_index(roots=roots, name=name, run_key=run_key, run_id=run_id)
     shutil.copyfile(spec_path, paths.run_dir / "spec.yaml")
 
     if kind == "docker":
         run_ctx = {
             "id": run_key,
-            "runs": f"/workspace/runs/{name}/{run_key}",
-            "artifacts": f"/workspace/artifacts/{name}/{run_key}",
+            "runs": f"/workspace/runs/{name}/{run_id}",
+            "artifacts": f"/workspace/artifacts/{name}/{run_id}",
         }
     else:
         run_ctx = {"id": run_key, "runs": str(paths.run_dir), "artifacts": str(paths.artifacts_dir)}
@@ -294,21 +333,10 @@ def run_experiment(
     ExperimentSpec.model_validate(resolved_final)
     write_json(paths.run_dir / "resolved_spec.json", resolved_final)
 
-    started_at = utc_now_iso()
-    started_at_compact = iso_to_compact_utc(started_at)
-
-    # Create a time-indexed alias to make it easier to find runs on disk.
-    # This does not affect the stable run_key (hash) used for identity/deduping.
-    safe_symlink(
-        link_path=roots.runs_root / name / "_by_time" / f"{started_at_compact}_{run_key}",
-        target_path=paths.run_dir,
-    )
-    safe_symlink(
-        link_path=roots.artifacts_root / name / "_by_time" / f"{started_at_compact}_{run_key}",
-        target_path=paths.artifacts_dir,
-    )
     run_json: dict[str, Any] = {
         "name": name,
+        "run_label": _sanitize_run_label(effective_run_label),
+        "run_id": run_id,
         "run_key": run_key,
         "created_at_utc": started_at,
         "started_at_utc": started_at,
@@ -501,6 +529,7 @@ def run_experiment(
 
     return {
         "name": name,
+        "run_id": run_id,
         "run_key": run_key,
         "run_dir": str(paths.run_dir),
         "artifacts_dir": str(paths.artifacts_dir),

@@ -63,6 +63,7 @@ class StepSpec(_Model):
 
 class ExperimentSpec(_Model):
     name: str
+    run_label: str | None = None
     env: EnvSpec = Field(default_factory=EnvSpec)
     resources: ResourcesSpec = Field(default_factory=ResourcesSpec)
     inputs: dict[str, InputSpec] = Field(default_factory=dict)

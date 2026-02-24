@@ -52,17 +52,24 @@ def run(
     salt: Annotated[
         str | None, typer.Option("--salt", help="Run-key salt (forces new run identity)")
     ] = None,
+    run_label: Annotated[
+        str | None,
+        typer.Option(
+            "--run-label",
+            help="Optional human label used in run directory naming (timestamp__label__hash).",
+        ),
+    ] = None,
     enforce_clean: Annotated[
         bool, typer.Option("--enforce-clean", help="Fail if git working tree is dirty")
     ] = False,
     follow_steps: Annotated[
         bool,
         typer.Option(
-            "--follow-steps",
-            "--follow",
+            "--follow-steps/--no-follow-steps",
+            "--follow/--no-follow",
             help="Stream step stdout/stderr to the terminal while running (still writes stdout.log/stderr.log).",
         ),
-    ] = False,
+    ] = True,
     stderr_tail_lines: Annotated[
         int,
         typer.Option(
@@ -90,11 +97,13 @@ def run(
         set_overrides=set_kv,
         set_string_overrides=set_str_kv,
         salt=salt,
+        run_label=run_label,
         enforce_clean=enforce_clean,
         follow_steps=follow_steps,
         stderr_tail_lines=stderr_tail_lines,
     )
     typer.echo(f"{res['name']} {res['run_key']}")
+    typer.echo(f"run_id: {res['run_id']}")
     typer.echo(f"run_dir: {res['run_dir']}")
     typer.echo(f"artifacts_dir: {res['artifacts_dir']}")
 

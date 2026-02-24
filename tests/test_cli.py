@@ -92,3 +92,109 @@ def test_cli_run_status_logs_inspect_and_locks_gc(tmp_path: Path) -> None:
     )
     assert res6.exit_code == 0
     assert not lock_fp.exists()
+
+
+def test_cli_run_defaults_follow_steps_true_and_allows_opt_out(tmp_path: Path, monkeypatch) -> None:
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    runs_root = tmp_path / "runs"
+    artifacts_root = tmp_path / "artifacts"
+
+    spec_fp = write_spec(
+        project_root,
+        {
+            "name": "cli",
+            "env": {"kind": "local"},
+            "steps": [{"id": "a", "cmd": [sys.executable, "-c", "print('hi')"]}],
+        },
+    )
+
+    captured: list[bool] = []
+
+    def _fake_run_experiment(**kwargs):
+        captured.append(bool(kwargs["follow_steps"]))
+        return {
+            "name": "cli",
+            "run_id": "20260224-120000Z__cli__abc12300",
+            "run_key": "abc123",
+            "run_dir": str(runs_root / "cli" / "abc123"),
+            "artifacts_dir": str(artifacts_root / "cli" / "abc123"),
+        }
+
+    monkeypatch.setattr("exp_harness.runner.run_experiment", _fake_run_experiment)
+
+    runner = CliRunner()
+    res_default = runner.invoke(
+        app,
+        [
+            "run",
+            str(spec_fp),
+            "--runs-root",
+            str(runs_root),
+            "--artifacts-root",
+            str(artifacts_root),
+        ],
+    )
+    assert res_default.exit_code == 0, res_default.stdout + res_default.stderr
+    assert captured[-1] is True
+
+    res_no_follow = runner.invoke(
+        app,
+        [
+            "run",
+            str(spec_fp),
+            "--runs-root",
+            str(runs_root),
+            "--artifacts-root",
+            str(artifacts_root),
+            "--no-follow-steps",
+        ],
+    )
+    assert res_no_follow.exit_code == 0, res_no_follow.stdout + res_no_follow.stderr
+    assert captured[-1] is False
+
+
+def test_cli_passes_run_label_override(tmp_path: Path, monkeypatch) -> None:
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    runs_root = tmp_path / "runs"
+    artifacts_root = tmp_path / "artifacts"
+    spec_fp = write_spec(
+        project_root,
+        {
+            "name": "cli",
+            "run_label": "from-spec",
+            "env": {"kind": "local"},
+            "steps": [{"id": "a", "cmd": [sys.executable, "-c", "print('hi')"]}],
+        },
+    )
+
+    captured: list[str | None] = []
+
+    def _fake_run_experiment(**kwargs):
+        captured.append(kwargs.get("run_label"))
+        return {
+            "name": "cli",
+            "run_id": "20260224-120000Z__from-cli__abc12300",
+            "run_key": "abc123",
+            "run_dir": str(runs_root / "cli" / "abc123"),
+            "artifacts_dir": str(artifacts_root / "cli" / "abc123"),
+        }
+
+    monkeypatch.setattr("exp_harness.runner.run_experiment", _fake_run_experiment)
+    runner = CliRunner()
+    res = runner.invoke(
+        app,
+        [
+            "run",
+            str(spec_fp),
+            "--runs-root",
+            str(runs_root),
+            "--artifacts-root",
+            str(artifacts_root),
+            "--run-label",
+            "from-cli",
+        ],
+    )
+    assert res.exit_code == 0, res.stdout + res.stderr
+    assert captured == ["from-cli"]

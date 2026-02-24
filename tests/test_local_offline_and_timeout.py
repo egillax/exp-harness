@@ -41,7 +41,7 @@ def test_local_offline_injects_env_and_provenance(tmp_path: Path) -> None:
     out = (run_dir / "steps" / "00_a" / "stdout.log").read_text(encoding="utf-8")
     assert "1\n" in out
     assert str((roots.artifacts_root / "hf_home").resolve()) in out
-    assert str((roots.artifacts_root / "off" / res["run_key"] / "a").resolve()) in out
+    assert str((roots.artifacts_root / "off" / run_dir.name / "a").resolve()) in out
 
     env_json = json.loads((run_dir / "provenance" / "environment.json").read_text(encoding="utf-8"))
     assert env_json["TRANSFORMERS_OFFLINE"] == "1"

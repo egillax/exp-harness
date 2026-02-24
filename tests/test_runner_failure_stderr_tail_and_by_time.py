@@ -11,7 +11,7 @@ from exp_harness.config import Roots
 from exp_harness.runner import run_experiment
 
 
-def test_step_failure_records_stderr_tail_and_creates_by_time_symlinks(
+def test_step_failure_records_stderr_tail_and_uses_human_readable_run_id(
     tmp_path: Path, capsys
 ) -> None:
     roots = Roots(
@@ -69,15 +69,9 @@ def test_step_failure_records_stderr_tail_and_creates_by_time_symlinks(
     assert run_json["error"]["rc"] == 2
     assert "line199" in (run_json["error"]["stderr_tail"] or "")
 
-    by_time = roots.runs_root / "fail" / "_by_time"
-    links = list(by_time.iterdir())
-    assert len(links) == 1
-    assert links[0].is_symlink()
-    assert links[0].resolve() == run_dir.resolve()
+    # Run directories are timestamp-first and include a short hash suffix.
+    assert "__spec__" in run_dir.name
+    assert run_json["run_id"] == run_dir.name
 
     artifacts_dir = roots.artifacts_root / "fail" / run_dir.name
-    by_time_a = roots.artifacts_root / "fail" / "_by_time"
-    links_a = list(by_time_a.iterdir())
-    assert len(links_a) == 1
-    assert links_a[0].is_symlink()
-    assert links_a[0].resolve() == artifacts_dir.resolve()
+    assert artifacts_dir.exists()

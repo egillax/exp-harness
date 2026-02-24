@@ -63,6 +63,7 @@ def print_status(*, roots: Roots, name: str | None, limit: int) -> None:
     runs = sorted(runs, key=key, reverse=True)[: max(0, limit)]
     for r in runs:
         nm = r.get("name", "?")
+        rid = r.get("run_id", "?")
         rk = r.get("run_key", "?")
         st = r.get("state", "?")
         g = r.get("allocated_gpus_host") or []
@@ -76,7 +77,7 @@ def print_status(*, roots: Roots, name: str | None, limit: int) -> None:
             and not _pid_alive(pid, start_ticks if isinstance(start_ticks, int) else None)
         ):
             stale = " (stale: pid not alive)"
-        print(f"{nm} {rk} {st}{stale} gpus={g} created={created} path={r.get('_path')}")
+        print(f"{nm} {rid} {rk} {st}{stale} gpus={g} created={created} path={r.get('_path')}")
 
     pool = GpuPool(locks_dir=(roots.runs_root / "_locks"))
     locks = pool.list_locks()

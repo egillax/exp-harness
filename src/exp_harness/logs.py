@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 
 from exp_harness.config import Roots
+from exp_harness.store import resolve_run_dir
 
 
 def _find_step_dir(run_dir: Path, step_id: str | None) -> Path | None:
@@ -43,7 +44,9 @@ def _follow(fp: Path) -> None:
 
 
 def show_logs(*, roots: Roots, name: str, run_key: str, step: str | None, follow: bool) -> None:
-    run_dir = roots.runs_root / name / run_key
+    run_dir = resolve_run_dir(roots=roots, name=name, run_key=run_key)
+    if not run_dir:
+        raise FileNotFoundError(f"Run not found: name={name} run_key={run_key}")
     step_dir = _find_step_dir(run_dir, step)
     if not step_dir:
         raise FileNotFoundError(f"Step not found under: {run_dir}")
