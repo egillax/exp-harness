@@ -49,8 +49,11 @@ run-experiment status
 
 Default outputs go under:
 
-- `experiment_results/runs/<name>/<run_key>/`
-- `experiment_results/artifacts/<name>/<run_key>/`
+- `experiment_results/runs/<name>/<run_id>/`
+- `experiment_results/artifacts/<name>/<run_id>/`
+
+Where `run_id` is timestamp-first and human-readable:
+- `<YYYYMMDD-HHMMSSZ>__<run_label>__<short_hash>`
 
 Override roots via CLI or env vars:
 
@@ -62,8 +65,8 @@ Override roots via CLI or env vars:
 ```bash
 run-experiment run spec.yaml \
   [--set params.x=3] [--set-str params.tag=001] \
-  [--salt myrun] [--enforce-clean] \
-  [--follow-steps] [--stderr-tail-lines 120] \
+  [--salt myrun] [--run-label phase2_lr_micro_up] [--enforce-clean] \
+  [--no-follow-steps] [--stderr-tail-lines 120] \
   [--runs-root /path/to/runs] [--artifacts-root /path/to/artifacts]
 
 run-experiment status [--name toy] [--limit 20] [--runs-root ...]
@@ -71,6 +74,8 @@ run-experiment logs <name> <run_key> [--step train] [-f] [--runs-root ...]
 run-experiment inspect <name> <run_key> [--runs-root ...]
 run-experiment locks gc [--grace-seconds 600] [--force] [--runs-root ...]
 ```
+
+`run-experiment run` streams step logs by default. Use `--no-follow-steps` to disable live streaming.
 
 ## Overrides
 
@@ -82,6 +87,7 @@ run-experiment locks gc [--grace-seconds 600] [--force] [--runs-root ...]
 
 - `extends` (optional): path (or list of paths) to a base spec to merge in first
 - `name` (required): experiment name
+- `run_label` (optional): human label used in run directory naming
 - `env.kind`: `local|docker` (default: `local`)
 - `env.workdir`: working directory (default: project root)
 - `env.env`: environment variables dict (default: `{}`)
@@ -128,7 +134,7 @@ Supported references:
 
 ## Outputs / provenance
 
-Each run writes a small durable run record under `.../runs/<name>/<run_key>/`:
+Each run writes a small durable run record under `.../runs/<name>/<run_id>/`:
 
 - `run.json`: state + pointers
 - `spec.yaml`: original spec
@@ -144,7 +150,7 @@ Each run writes a small durable run record under `.../runs/<name>/<run_key>/`:
   - `command.txt`, `exec.json`, `stdout.log`, `stderr.log` (and optional `metrics.json`)
   - On failure, `run-experiment run` prints a tail of `stderr.log` (configurable with `--stderr-tail-lines`).
 
-Large outputs land under `.../artifacts/<name>/<run_key>/<step_id>/` by default.
+Large outputs land under `.../artifacts/<name>/<run_id>/<step_id>/` by default.
 
 ## Docker notes (MVP)
 
@@ -172,11 +178,15 @@ Locks live under `experiment_results/runs/_locks/` (or your `--runs-root` equiva
 
 ## Run discoverability
 
-Runs are identified by a stable `run_key` (hash). To make it easier to find runs on disk by time,
-each run also creates a symlink under:
+Runs keep a stable `run_key` (hash) for identity/deduping and use a human-friendly `run_id` for paths:
 
-- `.../runs/<name>/_by_time/<timestamp>_<run_key>` -> `../<run_key>`
-- `.../artifacts/<name>/_by_time/<timestamp>_<run_key>` -> `../<run_key>`
+- `run_key`: canonical identity (full hash)
+- `run_id`: `<YYYYMMDD-HHMMSSZ>__<run_label>__<short_hash>`
+
+`run_label` precedence:
+1) CLI `--run-label`
+2) spec `run_label`
+3) spec filename stem
 
 ## Troubleshooting
 
