@@ -11,7 +11,13 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pre-commit>=3.7", "pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.6.0"]
+dev = [
+  "basedpyright>=1.31.0",
+  "pre-commit>=3.7",
+  "pytest>=8.0",
+  "pytest-cov>=5.0",
+  "ruff>=0.6.0",
+]
 
 [project.scripts]
 run-experiment = "exp_harness.cli:app"
@@ -53,3 +59,9 @@ ignore = [
   "ARG002", # test doubles / protocol-style methods
   "ARG005", # lambdas used for monkeypatch
 ]
+
+[tool.basedpyright]
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
+include = ["src", "tests"]
+reportMissingTypeStubs = "none"

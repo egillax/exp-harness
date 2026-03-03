@@ -9,7 +9,7 @@ import time
 from contextlib import suppress
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, cast
 
 from exp_harness.docker_utils import inspect_image
 from exp_harness.executors.base import RunContext, StepResult
@@ -448,9 +448,9 @@ class DockerExecutor:
                 continue
 
             for key, _ in events:
-                stream_name, file_fp, live_fp = key.data
+                _, file_fp, live_fp = key.data
                 try:
-                    chunk = os.read(key.fileobj.fileno(), 64 * 1024)
+                    chunk = os.read(_selector_fd(key.fileobj), 64 * 1024)
                 except Exception:
                     chunk = b""
                 if not chunk:
@@ -477,3 +477,15 @@ class DockerExecutor:
 
     def docker_metadata(self) -> dict[str, Any]:
         return self._image_meta or {}
+
+
+def _selector_fd(fileobj: object) -> int:
+    if isinstance(fileobj, int):
+        return fileobj
+    if hasattr(fileobj, "fileno"):
+        return cast(_HasFileno, fileobj).fileno()
+    raise TypeError("Selector file object does not provide fileno()")
+
+
+class _HasFileno(Protocol):
+    def fileno(self) -> int: ...

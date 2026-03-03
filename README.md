@@ -35,6 +35,7 @@ Common commands:
 ```bash
 uv run ruff format .
 uv run ruff check . --fix
+uv run basedpyright
 uv run pytest
 uv run pytest --cov=exp_harness --cov-report=term-missing
 ```

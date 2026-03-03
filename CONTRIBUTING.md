@@ -23,6 +23,7 @@ uv run pre-commit run --all-files
 
 - Format: `uv run ruff format .`
 - Lint: `uv run ruff check .`
+- Types: `uv run basedpyright`
 - Tests (fast, default): `uv run pytest`
 - Coverage: `uv run pytest --cov=exp_harness --cov-report=term-missing`
 
