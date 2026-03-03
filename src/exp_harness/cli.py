@@ -99,6 +99,88 @@ def run(
 
 
 @app.command()
+def sweep(
+    overrides: Annotated[
+        list[str] | None,
+        typer.Argument(
+            help="Hydra overrides; use comma-separated values for sweeps, e.g. ++params.lr=1e-3,1e-4",
+        ),
+    ] = None,
+    config_name: Annotated[
+        str,
+        typer.Option(
+            "--config-name",
+            help="Hydra config name from exp_harness.conf",
+        ),
+    ] = "config",
+    runs_root: Annotated[
+        Path | None,
+        typer.Option("--runs-root", help=f"Override runs root (env: {ENV_RUNS_ROOT})"),
+    ] = None,
+    artifacts_root: Annotated[
+        Path | None,
+        typer.Option(
+            "--artifacts-root", help=f"Override artifacts root (env: {ENV_ARTIFACTS_ROOT})"
+        ),
+    ] = None,
+    salt: Annotated[
+        str | None, typer.Option("--salt", help="Run-key salt applied to all sweep members")
+    ] = None,
+    enforce_clean: Annotated[
+        bool, typer.Option("--enforce-clean", help="Fail if git working tree is dirty")
+    ] = False,
+    follow_steps: Annotated[
+        bool,
+        typer.Option(
+            "--follow-steps/--no-follow-steps",
+            "--follow/--no-follow",
+            help="Stream step stdout/stderr while running sweep members.",
+        ),
+    ] = False,
+    stderr_tail_lines: Annotated[
+        int,
+        typer.Option(
+            "--stderr-tail-lines",
+            help="On step failure, print the last N lines of stderr.log (0 disables).",
+        ),
+    ] = 120,
+) -> None:
+    """
+    Run a Hydra-backed parameter sweep through the canonical harness runner.
+    """
+    from exp_harness.run.api import run_hydra_sweep
+
+    result = run_hydra_sweep(
+        overrides=overrides or [],
+        config_name=config_name,
+        runs_root=runs_root,
+        artifacts_root=artifacts_root,
+        salt=salt,
+        enforce_clean=enforce_clean,
+        follow_steps=follow_steps,
+        stderr_tail_lines=stderr_tail_lines,
+        continue_on_error=True,
+    )
+
+    for item in result["runs"]:
+        idx = item["index"]
+        if item["status"] == "succeeded":
+            run_res = item["result"]
+            assert run_res is not None
+            typer.echo(f"[{idx}/{result['total']}] ok {run_res['name']} {run_res['run_key']}")
+        else:
+            over = " ".join(item["overrides"])
+            msg = item["error"] or "unknown error"
+            typer.echo(f"[{idx}/{result['total']}] failed ({over}): {msg}", err=True)
+
+    typer.echo(
+        f"sweep total={result['total']} succeeded={result['succeeded']} failed={result['failed']}"
+    )
+    if result["failed"] > 0:
+        raise typer.Exit(code=1)
+
+
+@app.command()
 def status(
     name: Annotated[str | None, typer.Option("--name", help="Filter by experiment name")] = None,
     runs_root: Annotated[

@@ -5,12 +5,15 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 from exp_harness.run.api import (
     OverrideParseError,
     compose_experiment_config,
+    expand_hydra_sweep_overrides,
     parse_set_overrides,
     run_experiment,
+    run_hydra_sweep,
 )
 from tests.helpers import write_spec
 
@@ -56,6 +59,44 @@ def test_compose_experiment_config_does_not_create_hydra_outputs(tmp_path: Path)
         os.chdir(old_cwd)
     assert not (tmp_path / "outputs").exists()
     assert not (tmp_path / ".hydra").exists()
+
+
+def test_expand_hydra_sweep_overrides_builds_cartesian_product() -> None:
+    combos = expand_hydra_sweep_overrides(
+        ["name=demo", "params.lr=1e-3,1e-4", "resources=default,gpu1"]
+    )
+    assert len(combos) == 4
+    assert ["name=demo", "params.lr=0.001", "resources=default"] in combos
+    assert ["name=demo", "params.lr=0.0001", "resources=gpu1"] in combos
+
+
+def test_run_hydra_sweep_collects_partial_failures(tmp_path: Path, monkeypatch) -> None:
+    def _fake_run_experiment(**kwargs):
+        spec_path = Path(kwargs["spec_path"])
+        spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+        kind = str(spec.get("env", {}).get("kind"))
+        if kind == "docker":
+            raise RuntimeError("docker boom")
+        return {
+            "name": str(spec.get("name")),
+            "run_id": f"run-{kind}",
+            "run_key": f"key-{kind}",
+            "run_dir": str(tmp_path / "runs" / f"run-{kind}"),
+            "artifacts_dir": str(tmp_path / "artifacts" / f"run-{kind}"),
+        }
+
+    monkeypatch.setattr("exp_harness.run.api.run_experiment", _fake_run_experiment)
+    result = run_hydra_sweep(
+        overrides=["name=sweep_api", "env=local,docker"],
+        project_root=tmp_path,
+    )
+
+    assert result["total"] == 2
+    assert result["succeeded"] == 1
+    assert result["failed"] == 1
+    failed = [item for item in result["runs"] if item["status"] == "failed"]
+    assert len(failed) == 1
+    assert failed[0]["error"] == "docker boom"
 
 
 def test_run_experiment_api_runs_spec_and_applies_overrides(tmp_path: Path) -> None:

@@ -74,6 +74,7 @@ run-experiment status [--name toy] [--limit 20] [--runs-root ...]
 run-experiment logs <name> <run_key> [--step train] [-f] [--runs-root ...]
 run-experiment inspect <name> <run_key> [--runs-root ...]
 run-experiment locks gc [--grace-seconds 600] [--force] [--runs-root ...]
+run-experiment sweep "name=myexp" "++params.lr=1e-3,1e-4" "resources=default,gpu1"
 ```
 
 `run-experiment run` streams step logs by default. Use `--no-follow-steps` to disable live streaming.
@@ -108,6 +109,17 @@ print(cfg["env"]["kind"])  # docker
 
 The harness remains the source of truth for run directories/provenance; Hydra is used only for config
 composition and overrides.
+
+Hydra sweep API:
+
+```python
+from exp_harness.run.api import run_hydra_sweep
+
+summary = run_hydra_sweep(
+    overrides=["name=myexp", "++params.lr=1e-3,1e-4", "resources=default,gpu1"],
+)
+print(summary["total"], summary["succeeded"], summary["failed"])
+```
 
 ## Overrides
 
