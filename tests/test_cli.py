@@ -121,7 +121,7 @@ def test_cli_run_defaults_follow_steps_true_and_allows_opt_out(tmp_path: Path, m
             "artifacts_dir": str(artifacts_root / "cli" / "abc123"),
         }
 
-    monkeypatch.setattr("exp_harness.runner.run_experiment", _fake_run_experiment)
+    monkeypatch.setattr("exp_harness.run.api.run_experiment", _fake_run_experiment)
 
     runner = CliRunner()
     res_default = runner.invoke(
@@ -181,7 +181,7 @@ def test_cli_passes_run_label_override(tmp_path: Path, monkeypatch) -> None:
             "artifacts_dir": str(artifacts_root / "cli" / "abc123"),
         }
 
-    monkeypatch.setattr("exp_harness.runner.run_experiment", _fake_run_experiment)
+    monkeypatch.setattr("exp_harness.run.api.run_experiment", _fake_run_experiment)
     runner = CliRunner()
     res = runner.invoke(
         app,
