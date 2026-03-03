@@ -2,15 +2,23 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import Any, TypedDict, cast
+
+from hydra import compose, initialize_config_module
+from omegaconf import OmegaConf
 
 from exp_harness.config import resolve_roots
 from exp_harness.runner import run_experiment as _run_experiment
+from exp_harness.spec import ExperimentSpec
 from exp_harness.utils import discover_project_root
 
 
 class OverrideParseError(ValueError):
     """Raised when a --set/--set-str assignment is not in KEY=VALUE form."""
+
+
+class ComposeConfigError(ValueError):
+    """Raised when Hydra composition does not produce a valid experiment mapping."""
 
 
 class RunResult(TypedDict):
@@ -32,6 +40,25 @@ def parse_set_overrides(values: Sequence[str]) -> list[tuple[str, str]]:
             raise OverrideParseError("Empty key")
         parsed.append((key, rhs))
     return parsed
+
+
+def compose_experiment_config(
+    *,
+    overrides: Sequence[str] | None = None,
+    config_name: str = "config",
+    config_module: str = "exp_harness.conf",
+) -> dict[str, Any]:
+    with initialize_config_module(version_base=None, config_module=config_module):
+        cfg = compose(
+            config_name=config_name,
+            overrides=list(overrides or []),
+            return_hydra_config=False,
+        )
+    data = OmegaConf.to_container(cfg, resolve=True)
+    if not isinstance(data, dict):
+        raise ComposeConfigError("Hydra composition must produce a top-level mapping")
+    ExperimentSpec.model_validate(data)
+    return cast(dict[str, Any], data)
 
 
 def run_experiment(

@@ -1,0 +1,13 @@
+defaults:
+  - env: local
+  - resources: default
+  - _self_
+
+name: default_experiment
+run_label: null
+inputs: {}
+vars: {}
+params: {}
+steps:
+  - id: main
+    cmd: ["python", "-c", "print('hello from hydra')"]

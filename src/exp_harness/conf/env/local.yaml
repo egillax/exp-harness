@@ -1,0 +1,5 @@
+kind: local
+workdir: null
+env: {}
+offline: false
+docker: null
