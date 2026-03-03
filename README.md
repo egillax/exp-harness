@@ -78,6 +78,23 @@ run-experiment locks gc [--grace-seconds 600] [--force] [--runs-root ...]
 
 `run-experiment run` streams step logs by default. Use `--no-follow-steps` to disable live streaming.
 
+## Python API
+
+```python
+from pathlib import Path
+
+from exp_harness.run.api import run_experiment
+
+result = run_experiment(
+    spec_path=Path("examples/toy.yaml"),
+    set_overrides=[("params.lr", "1e-4")],
+    runs_root=Path("experiment_results/runs"),
+    artifacts_root=Path("experiment_results/artifacts"),
+    follow_steps=False,
+)
+print(result["run_key"])
+```
+
 ## Overrides
 
 - `--set params.x=...` parses the RHS as YAML (so `3`, `true`, `[1,2]` work).

@@ -7,21 +7,12 @@ from typing import Annotated, Any
 import typer
 
 from exp_harness.config import ENV_ARTIFACTS_ROOT, ENV_RUNS_ROOT, resolve_roots
-from exp_harness.utils import discover_project_root, discover_project_root_from_dir
+from exp_harness.run.api import OverrideParseError, parse_set_overrides
+from exp_harness.utils import discover_project_root_from_dir
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 locks_app = typer.Typer(no_args_is_help=True)
 app.add_typer(locks_app, name="locks")
-
-
-def _parse_set_kv(s: str) -> tuple[str, str]:
-    if "=" not in s:
-        raise typer.BadParameter("Expected KEY=VALUE")
-    k, v = s.split("=", 1)
-    k = k.strip()
-    if not k:
-        raise typer.BadParameter("Empty key")
-    return k, v
 
 
 @app.command()
@@ -81,21 +72,20 @@ def run(
     """
     Run a multi-step experiment from a YAML spec.
     """
-    from exp_harness.runner import run_experiment
+    from exp_harness.run.api import run_experiment
 
-    project_root = discover_project_root(spec)
-    roots = resolve_roots(
-        project_root=project_root, runs_root=runs_root, artifacts_root=artifacts_root
-    )
-
-    set_kv = [_parse_set_kv(x) for x in (set_ or [])]
-    set_str_kv = [_parse_set_kv(x) for x in (set_str or [])]
+    try:
+        set_kv = parse_set_overrides(set_ or [])
+        set_str_kv = parse_set_overrides(set_str or [])
+    except OverrideParseError as e:
+        raise typer.BadParameter(str(e)) from e
 
     res = run_experiment(
         spec_path=spec,
-        roots=roots,
         set_overrides=set_kv,
         set_string_overrides=set_str_kv,
+        runs_root=runs_root,
+        artifacts_root=artifacts_root,
         salt=salt,
         run_label=run_label,
         enforce_clean=enforce_clean,
