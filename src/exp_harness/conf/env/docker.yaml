@@ -1,0 +1,13 @@
+kind: docker
+workdir: /workspace
+env: {}
+offline: false
+docker:
+  image: python:3.12-slim
+  mounts: null
+  shm_size: null
+  ipc: private
+  network: bridge
+  runtime: null
+  gpu_mode: auto
+  allow_unverified_image: false

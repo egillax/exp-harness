@@ -6,7 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from exp_harness.run.api import OverrideParseError, parse_set_overrides, run_experiment
+from exp_harness.run.api import (
+    OverrideParseError,
+    compose_experiment_config,
+    parse_set_overrides,
+    run_experiment,
+)
 from tests.helpers import write_spec
 
 
@@ -22,6 +27,35 @@ def test_parse_set_overrides_errors_on_invalid_assignments() -> None:
         parse_set_overrides(["params.x"])
     with pytest.raises(OverrideParseError, match="Empty key"):
         parse_set_overrides(["=1"])
+
+
+def test_compose_experiment_config_defaults_are_valid() -> None:
+    cfg = compose_experiment_config()
+    assert cfg["name"] == "default_experiment"
+    assert cfg["env"]["kind"] == "local"
+    assert cfg["resources"]["gpus"] == 0
+    assert "hydra" not in cfg
+
+
+def test_compose_experiment_config_supports_group_overrides() -> None:
+    cfg = compose_experiment_config(overrides=["env=docker", "resources=gpu1", "name=hydra_demo"])
+    assert cfg["name"] == "hydra_demo"
+    assert cfg["env"]["kind"] == "docker"
+    assert cfg["resources"]["gpus"] == 1
+    assert cfg["env"]["docker"]["image"] == "python:3.12-slim"
+
+
+def test_compose_experiment_config_does_not_create_hydra_outputs(tmp_path: Path) -> None:
+    old_cwd = Path.cwd()
+    try:
+        import os
+
+        os.chdir(tmp_path)
+        _ = compose_experiment_config()
+    finally:
+        os.chdir(old_cwd)
+    assert not (tmp_path / "outputs").exists()
+    assert not (tmp_path / ".hydra").exists()
 
 
 def test_run_experiment_api_runs_spec_and_applies_overrides(tmp_path: Path) -> None:

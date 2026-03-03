@@ -95,6 +95,20 @@ result = run_experiment(
 print(result["run_key"])
 ```
 
+Hydra composition API:
+
+```python
+from exp_harness.run.api import compose_experiment_config
+
+cfg = compose_experiment_config(
+    overrides=["env=docker", "resources=gpu1", "name=my_experiment"]
+)
+print(cfg["env"]["kind"])  # docker
+```
+
+The harness remains the source of truth for run directories/provenance; Hydra is used only for config
+composition and overrides.
+
 ## Overrides
 
 - `--set params.x=...` parses the RHS as YAML (so `3`, `true`, `[1,2]` work).
