@@ -8,6 +8,7 @@ import sys
 import time
 from contextlib import suppress
 from pathlib import Path
+from typing import Protocol, cast
 
 from exp_harness.executors.base import RunContext, StepResult
 from exp_harness.utils import utc_now_iso, write_json, write_text
@@ -139,7 +140,7 @@ def _stream_process(
         for key, _ in events:
             _, file_fp, live_fp = key.data
             try:
-                chunk = os.read(key.fileobj.fileno(), 64 * 1024)
+                chunk = os.read(_selector_fd(key.fileobj), 64 * 1024)
             except Exception:
                 chunk = b""
             if not chunk:
@@ -157,3 +158,15 @@ def _stream_process(
     if killed:
         return 124
     return int(proc.returncode or 0)
+
+
+def _selector_fd(fileobj: object) -> int:
+    if isinstance(fileobj, int):
+        return fileobj
+    if hasattr(fileobj, "fileno"):
+        return cast(_HasFileno, fileobj).fileno()
+    raise TypeError("Selector file object does not provide fileno()")
+
+
+class _HasFileno(Protocol):
+    def fileno(self) -> int: ...

@@ -31,6 +31,9 @@ jobs:
       - name: Ruff lint
         run: uv run ruff check .
 
+      - name: Basedpyright
+        run: uv run basedpyright
+
       - name: Prune uv cache
         if: always()
         run: uv cache prune --ci
