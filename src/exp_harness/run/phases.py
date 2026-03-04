@@ -8,9 +8,9 @@ from typing import Any
 
 from exp_harness.config import Roots
 from exp_harness.errors import RunConflictError
-from exp_harness.git_info import GitInfo
-from exp_harness.gpu_pool import Allocation, GpuPool, allocate_gpus
+from exp_harness.provenance.git import GitInfo
 from exp_harness.resolve import resolve_final
+from exp_harness.resources.gpu_pool import Allocation, GpuPool, allocate_gpus
 from exp_harness.run.execution import ExecutorFactory, build_executor_and_context, run_ordered_steps
 from exp_harness.run.provenance import initial_run_json, write_run_provenance
 from exp_harness.run.runtime_env import prepare_effective_docker, prepare_effective_env

@@ -7,7 +7,7 @@ from exp_harness.config import Roots
 from exp_harness.docker_utils import ARTIFACTS_ROOT_PLACEHOLDER, RUNS_ROOT_PLACEHOLDER
 from exp_harness.errors import DockerConfigurationError, DockerImageInspectionError
 from exp_harness.fingerprints import fingerprint_path
-from exp_harness.git_info import GitInfo
+from exp_harness.provenance.git import GitInfo
 from exp_harness.resolve import resolve_for_hashing
 from exp_harness.run.naming import format_run_id
 from exp_harness.run.runtime_env import prepare_effective_docker, resolved_offline_env

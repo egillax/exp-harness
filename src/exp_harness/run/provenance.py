@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 from exp_harness.config import Roots
-from exp_harness.git_info import GitInfo
 from exp_harness.provenance import (
     write_env_provenance,
     write_git_provenance,
@@ -13,6 +12,7 @@ from exp_harness.provenance import (
     write_nvidia_smi,
     write_python_and_freeze,
 )
+from exp_harness.provenance.git import GitInfo
 from exp_harness.run.naming import proc_start_ticks_linux, sanitize_run_label
 from exp_harness.store import RunPaths
 from exp_harness.utils import write_json

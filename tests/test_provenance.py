@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from exp_harness.git_info import GitInfo
 from exp_harness.provenance import (
     write_env_provenance,
     write_git_provenance,
@@ -11,6 +10,7 @@ from exp_harness.provenance import (
     write_nvidia_smi,
     write_python_and_freeze,
 )
+from exp_harness.provenance.git import GitInfo
 
 
 def test_write_git_provenance(tmp_path: Path) -> None:

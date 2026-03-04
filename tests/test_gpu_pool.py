@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from exp_harness.errors import GpuAllocationError, GpuRequestError
-from exp_harness.gpu_pool import GpuPool, allocate_gpus
+from exp_harness.resources.gpu_pool import GpuPool, allocate_gpus
 
 
 def test_lockinfo_pid_parsing_does_not_crash(tmp_path: Path) -> None:

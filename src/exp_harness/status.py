@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from exp_harness.config import Roots
-from exp_harness.gpu_pool import GpuPool
+from exp_harness.resources.gpu_pool import GpuPool
 from exp_harness.utils import normalize_space
 
 

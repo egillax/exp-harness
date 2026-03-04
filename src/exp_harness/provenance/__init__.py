@@ -7,8 +7,18 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from exp_harness.git_info import GitInfo
+from exp_harness.provenance.git import GitInfo, collect_git_info
 from exp_harness.utils import hostname, shell_out, utc_now_iso, which, write_json, write_text
+
+__all__ = [
+    "GitInfo",
+    "collect_git_info",
+    "write_git_provenance",
+    "write_host_provenance",
+    "write_env_provenance",
+    "write_nvidia_smi",
+    "write_python_and_freeze",
+]
 
 
 def write_git_provenance(prov_dir: Path, git: GitInfo) -> None:

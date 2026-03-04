@@ -8,7 +8,7 @@ from exp_harness.docker_utils import inspect_image
 from exp_harness.errors import GitDirtyWorktreeError
 from exp_harness.executors.docker import DockerExecutor
 from exp_harness.executors.local import LocalExecutor
-from exp_harness.git_info import collect_git_info
+from exp_harness.provenance.git import collect_git_info
 from exp_harness.resolve import apply_computed_defaults, load_and_validate
 from exp_harness.run.identity import build_run_identity
 from exp_harness.run.phases import (

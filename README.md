@@ -232,6 +232,17 @@ Runs keep a stable `run_key` (hash) for identity/deduping and use a human-friend
 2) spec `run_label`
 3) spec filename stem
 
+## Package layout
+
+Current core package topology:
+
+- `exp_harness/config/`: roots/env-path resolution (`Roots`, `resolve_roots`)
+- `exp_harness/run/`: run orchestration API, identity, phases, state, and execution helpers
+- `exp_harness/executors/`: local and docker step executors
+- `exp_harness/provenance/`: git/host/env/provenance writers and git metadata collection
+- `exp_harness/resources/`: GPU lock pool + allocation helpers
+- `exp_harness/cli.py`: Typer CLI entrypoint
+
 ## Troubleshooting
 
 - No artifacts from Docker runs: check `env.docker.mounts` (and that it’s not `[]`).

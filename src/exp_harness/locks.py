@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from exp_harness.config import Roots
-from exp_harness.gpu_pool import GpuPool, LockInfo
+from exp_harness.resources.gpu_pool import GpuPool, LockInfo
 from exp_harness.utils import shell_out, which
 
 

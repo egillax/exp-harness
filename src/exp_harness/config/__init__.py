@@ -7,6 +7,8 @@ from pathlib import Path
 ENV_RUNS_ROOT = "RUN_EXPERIMENT_RUNS_ROOT"
 ENV_ARTIFACTS_ROOT = "RUN_EXPERIMENT_ARTIFACTS_ROOT"
 
+__all__ = ["ENV_RUNS_ROOT", "ENV_ARTIFACTS_ROOT", "Roots", "resolve_roots"]
+
 
 @dataclass(frozen=True)
 class Roots:

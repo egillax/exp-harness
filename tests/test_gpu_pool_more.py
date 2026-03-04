@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from exp_harness.errors import GpuAllocationError
-from exp_harness.gpu_pool import GpuPool, allocate_gpus
+from exp_harness.resources.gpu_pool import GpuPool, allocate_gpus
 
 
 def test_try_acquire_and_release(tmp_path: Path) -> None:
@@ -54,11 +54,11 @@ def test_detect_gpu_count_parses_nvidia_smi(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     pool = GpuPool(locks_dir=tmp_path / "locks")
-    monkeypatch.setattr("exp_harness.gpu_pool.which", lambda _: "nvidia-smi")
+    monkeypatch.setattr("exp_harness.resources.gpu_pool.which", lambda _: "nvidia-smi")
 
     def fake_shell_out(argv, cwd=None):
         assert argv == ["nvidia-smi", "-L"]
         return 0, "GPU 0: X\nGPU 1: Y\n", ""
 
-    monkeypatch.setattr("exp_harness.gpu_pool.shell_out", fake_shell_out)
+    monkeypatch.setattr("exp_harness.resources.gpu_pool.shell_out", fake_shell_out)
     assert pool.detect_gpu_count() == 2

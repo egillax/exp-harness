@@ -12,7 +12,7 @@ def test_gpu_lock_conflict_across_processes(tmp_path: Path) -> None:
     locks_dir = tmp_path / "locks"
 
     def worker(req, sleep_s, q):
-        from exp_harness.gpu_pool import GpuPool, allocate_gpus
+        from exp_harness.resources.gpu_pool import GpuPool, allocate_gpus
 
         GpuPool.detect_gpu_count = lambda self: 4  # type: ignore[method-assign]
         pool = GpuPool(locks_dir=locks_dir)
