@@ -155,8 +155,13 @@ def phase_allocate_resources(
         run_key=run_key,
         name=name,
     )
-    run_json["allocated_gpus_host"] = allocation.gpu_ids
-    write_run_json(prepared.paths, run_json)
+    try:
+        run_json["allocated_gpus_host"] = allocation.gpu_ids
+        write_run_json(prepared.paths, run_json)
+    except Exception:
+        for gpu_id in allocation.gpu_ids:
+            pool.release(gpu_id, expected_pid=allocation.pid)
+        raise
     return ResourceAllocation(pool=pool, allocation=allocation)
 
 
