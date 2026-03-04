@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from exp_harness.errors import GpuAllocationError, GpuRequestError
 from exp_harness.gpu_pool import GpuPool, allocate_gpus
 
 
@@ -25,7 +26,7 @@ def test_allocate_gpus_validates_explicit_ids(
     pool = GpuPool(locks_dir=tmp_path / "locks")
     monkeypatch.setattr(pool, "detect_gpu_count", lambda: 2)
 
-    with pytest.raises(RuntimeError, match=r"out of range"):
+    with pytest.raises(GpuRequestError, match=r"out of range"):
         allocate_gpus(pool, [7], run_path="x", run_key="y", name="z")
 
 
@@ -45,5 +46,5 @@ def test_allocate_gpus_integer_request_requires_detection(
     pool = GpuPool(locks_dir=tmp_path / "locks")
     monkeypatch.setattr(pool, "detect_gpu_count", lambda: 0)
 
-    with pytest.raises(RuntimeError, match=r"No GPUs detected"):
+    with pytest.raises(GpuAllocationError, match=r"No GPUs detected"):
         allocate_gpus(pool, 1, run_path="x", run_key="y", name="z")

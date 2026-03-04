@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import logging
 import shutil
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from exp_harness.config import Roots
+from exp_harness.errors import RunConflictError
 from exp_harness.git_info import GitInfo
 from exp_harness.gpu_pool import Allocation, GpuPool, allocate_gpus
 from exp_harness.resolve import resolve_final
@@ -24,6 +25,8 @@ from exp_harness.store import (
     write_run_key_index,
 )
 from exp_harness.utils import ensure_dir, write_json
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -52,11 +55,11 @@ def phase_prepare_run(
 ) -> PreparedRun:
     existing_run_dir = resolve_run_dir(roots=roots, name=name, run_key=run_key)
     if existing_run_dir is not None:
-        raise RuntimeError(f"Run already exists: {existing_run_dir} (use --salt for a new run)")
+        raise RunConflictError(f"Run already exists: {existing_run_dir} (use --salt for a new run)")
 
     paths = get_run_paths(roots=roots, name=name, run_id=run_id)
     if paths.run_dir.exists():
-        raise RuntimeError(
+        raise RunConflictError(
             f"Run directory already exists: {paths.run_dir} (use --salt or a different --run-label)"
         )
 
@@ -81,10 +84,7 @@ def phase_prepare_run(
 
     env_block = resolved_final.get("env") or {}
     if kind == "local" and bool(env_block.get("offline")):
-        print(
-            "warning: offline mode for local runs is best-effort; network is not sandboxed",
-            file=sys.stderr,
-        )
+        logger.warning("offline mode for local runs is best-effort; network is not sandboxed")
 
     ExperimentSpec.model_validate(resolved_final)
     write_json(paths.run_dir / "resolved_spec.json", resolved_final)

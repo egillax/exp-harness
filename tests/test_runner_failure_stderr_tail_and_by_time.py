@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 from exp_harness.config import Roots
+from exp_harness.errors import StepExecutionError
 from exp_harness.runner import run_experiment
 
 
@@ -44,7 +45,7 @@ def test_step_failure_records_stderr_tail_and_uses_human_readable_run_id(
         encoding="utf-8",
     )
 
-    with pytest.raises(RuntimeError, match=r"Step failed: boom \(rc=2\)"):
+    with pytest.raises(StepExecutionError, match=r"Step failed: boom \(rc=2\)") as exc_info:
         run_experiment(
             spec_path=spec_fp,
             roots=roots,
@@ -54,6 +55,8 @@ def test_step_failure_records_stderr_tail_and_uses_human_readable_run_id(
             enforce_clean=False,
             stderr_tail_lines=5,
         )
+    assert exc_info.value.step_id == "boom"
+    assert exc_info.value.rc == 2
 
     err = capsys.readouterr().err
     assert "[exp-harness] stderr tail (last 5 lines)" in err

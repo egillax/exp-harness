@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
-import sys
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from exp_harness.errors import GpuAllocationError, GpuRequestError
 from exp_harness.utils import hostname, shell_out, utc_now_iso, which
+
+logger = logging.getLogger(__name__)
 
 
 def _proc_start_ticks_linux(pid: int) -> int | None:
@@ -142,7 +145,7 @@ def allocate_gpus(
         if request <= 0:
             return Allocation(gpu_ids=[], pid=os.getpid())
         if count == 0:
-            raise RuntimeError(
+            raise GpuAllocationError(
                 "No GPUs detected (nvidia-smi not available), but GPUs were requested"
             )
         want = request
@@ -153,22 +156,22 @@ def allocate_gpus(
         if want == 0:
             return Allocation(gpu_ids=[], pid=os.getpid())
         if any(x < 0 for x in candidates):
-            raise RuntimeError(f"Requested GPU ids must be non-negative: {candidates}")
+            raise GpuRequestError(f"Requested GPU ids must be non-negative: {candidates}")
         if len(set(candidates)) != len(candidates):
-            raise RuntimeError(f"Requested GPU ids contain duplicates: {candidates}")
+            raise GpuRequestError(f"Requested GPU ids contain duplicates: {candidates}")
 
         # If nvidia-smi isn't available (common in Docker-outside-of-Docker runners), we can't
         # validate the GPU id range. Still allow explicit ids, since the user may know which ids
         # exist on the host. The study container launch will fail later if the ids are invalid.
         if count == 0:
-            print(
-                f"warning: nvidia-smi not available; skipping GPU id range validation for explicit request: {candidates}",
-                file=sys.stderr,
+            logger.warning(
+                "nvidia-smi not available; skipping GPU id range validation for explicit request: %s",
+                candidates,
             )
         else:
             bad = [x for x in candidates if x >= count]
             if bad:
-                raise RuntimeError(f"Requested GPU ids out of range (0..{count - 1}): {bad}")
+                raise GpuRequestError(f"Requested GPU ids out of range (0..{count - 1}): {bad}")
 
     acquired: list[int] = []
     pid = os.getpid()
@@ -192,9 +195,9 @@ def allocate_gpus(
         for g in acquired:
             pool.release(g, expected_pid=pid)
         if isinstance(request, int):
-            raise RuntimeError(
+            raise GpuAllocationError(
                 f"Insufficient free GPUs: requested {want}, acquired {len(acquired)}"
             )
-        raise RuntimeError(f"Could not acquire requested GPUs: {request}")
+        raise GpuAllocationError(f"Could not acquire requested GPUs: {request}")
 
     return Allocation(gpu_ids=acquired, pid=pid)

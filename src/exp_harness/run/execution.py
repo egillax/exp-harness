@@ -5,6 +5,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
 
+from exp_harness.errors import StepExecutionError
 from exp_harness.executors.base import RunContext, StepResult
 from exp_harness.store import RunPaths
 from exp_harness.utils import ensure_dir, tail_text_lines
@@ -144,4 +145,4 @@ def run_ordered_steps(
                 "stdout_log": str(stdout_fp),
             }
             write_run_json_fn(paths, run_json)
-            raise RuntimeError(f"Step failed: {step_id} (rc={result.rc})")
+            raise StepExecutionError(step_id=step_id, rc=int(result.rc))

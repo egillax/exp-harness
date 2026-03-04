@@ -5,6 +5,7 @@ from pathlib import Path
 
 from exp_harness.config import Roots
 from exp_harness.docker_utils import inspect_image
+from exp_harness.errors import GitDirtyWorktreeError
 from exp_harness.executors.docker import DockerExecutor
 from exp_harness.executors.local import LocalExecutor
 from exp_harness.git_info import collect_git_info
@@ -54,7 +55,7 @@ def run_experiment(
 
     git = collect_git_info(project_root=roots.project_root)
     if enforce_clean and git.dirty:
-        raise RuntimeError("Git working tree is dirty (--enforce-clean is set)")
+        raise GitDirtyWorktreeError("Git working tree is dirty (--enforce-clean is set)")
 
     identity = build_run_identity(
         raw_hash=raw_hash,

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 import traceback
 from typing import Any
 
 from exp_harness.utils import utc_now_iso
+
+logger = logging.getLogger(__name__)
 
 
 def mark_succeeded(run_json: dict[str, Any]) -> None:
@@ -17,6 +20,7 @@ def mark_interrupted(run_json: dict[str, Any]) -> None:
 
 
 def mark_failed_with_traceback(run_json: dict[str, Any], *, error: Exception) -> None:
+    logger.exception("run failed: %s", error)
     run_json["state"] = "failed"
     run_json["finished_at_utc"] = utc_now_iso()
     existing = run_json.get("error")

@@ -7,6 +7,7 @@ import pytest
 import yaml
 
 from exp_harness.config import Roots
+from exp_harness.errors import StepExecutionError
 from exp_harness.runner import run_experiment
 
 
@@ -78,7 +79,7 @@ def test_failed_step_stops_downstream(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(StepExecutionError):
         run_experiment(
             spec_path=spec_fp,
             roots=roots,

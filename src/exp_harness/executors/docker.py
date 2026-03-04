@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Protocol, cast
 
 from exp_harness.docker_utils import inspect_image
+from exp_harness.errors import DockerConfigurationError
 from exp_harness.executors.base import RunContext, StepResult
 from exp_harness.utils import resolve_relpath, utc_now_iso, write_json, write_text
 
@@ -105,7 +106,7 @@ class DockerExecutor:
             argv += [f"--shm-size={shm_size}"]
         mounts = docker.get("mounts")
         if mounts is None:
-            raise RuntimeError(
+            raise DockerConfigurationError(
                 "Resolved docker mounts missing; expected env.docker.mounts to be a list"
             )
         for m in mounts:
@@ -129,7 +130,7 @@ class DockerExecutor:
         mode = str(docker.get("gpu_mode") or "auto").strip().lower()
         if mode in {"auto", "docker_gpus_device", "nvidia_visible_devices", "none"}:
             return mode
-        raise RuntimeError(f"invalid env.docker.gpu_mode: {mode!r}")
+        raise DockerConfigurationError(f"invalid env.docker.gpu_mode: {mode!r}")
 
     def _resolve_gpu_mode(self, ctx: RunContext) -> str:
         mode = self._gpu_mode_requested(ctx)
@@ -247,7 +248,7 @@ class DockerExecutor:
         docker = ctx.docker or {}
         image = docker.get("image")
         if not image:
-            raise RuntimeError("env.docker.image is required for docker runs")
+            raise DockerConfigurationError("env.docker.image is required for docker runs")
 
         argv: list[str] = ["docker", "run", "--rm"]
 
@@ -270,7 +271,7 @@ class DockerExecutor:
 
         mounts = docker.get("mounts")
         if mounts is None:
-            raise RuntimeError(
+            raise DockerConfigurationError(
                 "Resolved docker mounts missing; expected env.docker.mounts to be a list"
             )
         for m in mounts:
@@ -307,7 +308,7 @@ class DockerExecutor:
             elif mode == "none":
                 pass
             else:
-                raise RuntimeError(f"unexpected gpu mode: {mode!r}")
+                raise DockerConfigurationError(f"unexpected gpu mode: {mode!r}")
 
         for k, v in env.items():
             argv += ["-e", f"{k}={v}"]

@@ -7,6 +7,7 @@ import pytest
 import yaml
 
 from exp_harness.config import Roots
+from exp_harness.errors import DockerImageInspectionError
 from exp_harness.runner import run_experiment
 
 
@@ -62,7 +63,7 @@ def test_docker_image_inspect_fails_by_default(
         project_root=project_root, runs_root=tmp_path / "runs", artifacts_root=tmp_path / "art"
     )
 
-    with pytest.raises(RuntimeError, match="allow_unverified_image"):
+    with pytest.raises(DockerImageInspectionError, match="allow_unverified_image"):
         run_experiment(
             spec_path=spec_fp,
             roots=roots,

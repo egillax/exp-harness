@@ -5,6 +5,7 @@ from typing import Any, Protocol, TypedDict
 
 from exp_harness.config import Roots
 from exp_harness.docker_utils import ARTIFACTS_ROOT_PLACEHOLDER, RUNS_ROOT_PLACEHOLDER
+from exp_harness.errors import DockerConfigurationError, DockerImageInspectionError
 from exp_harness.fingerprints import fingerprint_path
 from exp_harness.git_info import GitInfo
 from exp_harness.resolve import resolve_for_hashing
@@ -81,11 +82,11 @@ def _resolve_docker_meta(
     docker_cfg = (resolved_hashing.get("env") or {}).get("docker") or {}
     image = docker_cfg.get("image")
     if not image:
-        raise RuntimeError("env.docker.image is required for docker runs")
+        raise DockerConfigurationError("env.docker.image is required for docker runs")
     allow_unverified = bool(docker_cfg.get("allow_unverified_image", False))
     docker_meta = inspect_image_fn(image=str(image), cwd=project_root)
     if docker_meta is None and not allow_unverified:
-        raise RuntimeError(
+        raise DockerImageInspectionError(
             f"docker image inspect failed for image={image!r}; set env.docker.allow_unverified_image: true to proceed"
         )
     if docker_meta is None:

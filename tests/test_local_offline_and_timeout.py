@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from exp_harness.errors import StepExecutionError
 from exp_harness.runner import run_experiment
 from tests.helpers import find_single_run_dir, tmp_roots, write_spec
 
@@ -71,7 +72,7 @@ def test_timeout_marks_step_timed_out_and_run_failed(tmp_path: Path) -> None:
         },
     )
 
-    with pytest.raises(RuntimeError, match="Step failed"):
+    with pytest.raises(StepExecutionError, match="Step failed"):
         run_experiment(
             spec_path=spec_fp,
             roots=roots,

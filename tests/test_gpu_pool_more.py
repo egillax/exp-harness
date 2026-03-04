@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from exp_harness.errors import GpuAllocationError
 from exp_harness.gpu_pool import GpuPool, allocate_gpus
 
 
@@ -40,7 +41,7 @@ def test_allocate_gpus_skips_locked_candidates_and_cleans_up_on_failure(
     assert alloc.gpu_ids == [1]
 
     # Now request 2 (should fail; and should clean up any partial acquisition).
-    with pytest.raises(RuntimeError, match="Insufficient free GPUs"):
+    with pytest.raises(GpuAllocationError, match="Insufficient free GPUs"):
         allocate_gpus(pool, 2, run_path="x", run_key="y", name="z")
 
     # GPU1 lock from the failed attempt should not exist (only the earlier allocation still holds).

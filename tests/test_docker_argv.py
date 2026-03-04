@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from exp_harness.errors import DockerConfigurationError
 from exp_harness.executors.base import RunContext
 from exp_harness.executors.docker import DockerExecutor
 
@@ -45,5 +46,5 @@ def test_docker_argv_requires_resolved_mounts(tmp_path: Path) -> None:
     ex = DockerExecutor()
     ctx = _ctx(tmp_path)
     ctx = ctx.__class__(**{**ctx.__dict__, "docker": {**(ctx.docker or {}), "mounts": None}})
-    with pytest.raises(RuntimeError, match="Resolved docker mounts missing"):
+    with pytest.raises(DockerConfigurationError, match="Resolved docker mounts missing"):
         ex._docker_run_argv(ctx, step_id="s", cmd=["echo", "hi"], step_artifacts_dir=None)
