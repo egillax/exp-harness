@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
 
@@ -43,6 +44,30 @@ def test_extends_deep_merge_and_list_replace(tmp_path: Path) -> None:
     assert raw["params"]["b"] == 9
     assert raw["params"]["nested"] == {"x": "keep", "y": "overlay", "z": "new"}
     assert [s["id"] for s in raw["steps"]] == ["overlay_step"]
+
+
+def test_extends_emits_compatibility_warning(tmp_path: Path, caplog) -> None:
+    base = tmp_path / "base.yaml"
+    overlay = tmp_path / "overlay.yaml"
+    _write_yaml(
+        base,
+        {
+            "name": "base",
+            "steps": [{"id": "base_step", "cmd": [sys.executable, "-c", "print('base')"]}],
+        },
+    )
+    _write_yaml(
+        overlay,
+        {
+            "extends": "base.yaml",
+            "name": "final",
+            "steps": [{"id": "overlay_step", "cmd": [sys.executable, "-c", "print('overlay')"]}],
+        },
+    )
+
+    with caplog.at_level(logging.WARNING, logger="exp_harness.resolve"):
+        _ = load_and_validate(spec_path=overlay, set_overrides=[], set_string_overrides=[])
+    assert "legacy `extends` layering is compatibility mode" in caplog.text
 
 
 def test_extends_list_of_bases(tmp_path: Path) -> None:

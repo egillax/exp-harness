@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,8 @@ import yaml
 from exp_harness.interp import InterpError, resolve_obj
 from exp_harness.spec import ExperimentSpec
 from exp_harness.utils import resolve_relpath
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -111,6 +114,11 @@ def load_and_validate(
     set_string_overrides: list[tuple[str, str]],
 ) -> dict[str, Any]:
     raw = _load_yaml_mapping(spec_path)
+    if raw.get("extends") is not None:
+        logger.warning(
+            "legacy `extends` layering is compatibility mode for file-based specs; "
+            "prefer Hydra config groups and `run-experiment run-hydra` for new runs"
+        )
     raw = _apply_extends(raw, spec_path=spec_path)
 
     for k, v in set_overrides:

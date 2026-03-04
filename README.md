@@ -128,13 +128,18 @@ print(summary["total"], summary["succeeded"], summary["failed"])
 
 ## Overrides
 
-- `--set params.x=...` parses the RHS as YAML (so `3`, `true`, `[1,2]` work).
-- `--set-str params.x=...` forces the RHS to be a string.
-- For many sweeps, prefer spec layering with `extends:` so you can keep a stable base spec and make small per-run spec files.
+- `run-hydra` / `sweep` use Hydra override syntax (`group=value`, `+key=value`, `++key=value`, comma sweeps).
+- `run --set params.x=...` parses the RHS as YAML (so `3`, `true`, `[1,2]` work).
+- `run --set-str params.x=...` forces the RHS to be a string.
+
+## Legacy File-Spec Compatibility
+
+- File-based specs (`run <spec.yaml>`) remain supported for existing workflows.
+- `extends` layering is compatibility mode for file specs; new workflows should prefer Hydra config groups and overrides.
 
 ## Spec schema (minimal reference)
 
-- `extends` (optional): path (or list of paths) to a base spec to merge in first
+- `extends` (optional, compatibility mode): path (or list of paths) to a base spec to merge in first
 - `name` (required): experiment name
 - `run_label` (optional): human label used in run directory naming
 - `env.kind`: `local|docker` (default: `local`)
