@@ -78,6 +78,7 @@ run-experiment sweep "name=myexp" "++params.lr=1e-3,1e-4" "resources=default,gpu
 ```
 
 `run-experiment run` streams step logs by default. Use `--no-follow-steps` to disable live streaming.
+Standard local experiments and sweeps do not require any bash wrapper scripts.
 
 ## Python API
 
@@ -266,3 +267,4 @@ Important: mounting `/var/run/docker.sock` gives the container root-equivalent c
 - Runner image Dockerfile: `docker/exp-harness-runner/Dockerfile`
 - Build helper: `scripts/docker_build_runner_image.sh`
 - Host wrapper template: `scripts/run-experiment-dood` (copy into a project as `run-experiment`)
+- Script audit and classification: `scripts/README.md`
