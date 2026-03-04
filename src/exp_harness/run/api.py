@@ -13,7 +13,6 @@ from hydra.core.override_parser.overrides_parser import OverridesParser
 from omegaconf import OmegaConf
 
 from exp_harness.config import resolve_roots
-from exp_harness.runner import run_experiment as _run_experiment
 from exp_harness.spec import ExperimentSpec
 from exp_harness.utils import discover_project_root, discover_project_root_from_dir
 
@@ -195,6 +194,8 @@ def run_experiment(
     follow_steps: bool = True,
     stderr_tail_lines: int = 120,
 ) -> RunResult:
+    from exp_harness.runner import run_experiment as _run_experiment
+
     resolved_project_root = project_root or discover_project_root(spec_path)
     roots = resolve_roots(
         project_root=resolved_project_root,
