@@ -222,7 +222,10 @@ def sweep(
     ] = 120,
 ) -> None:
     """
-    Run a Hydra-backed parameter sweep through the canonical harness runner.
+    Run a Hydra-composed sweep via harness-managed sequential execution.
+
+    This command accepts Hydra override syntax and sweep values, but execution is handled
+    by exp-harness (canonical run/provenance layout) rather than Hydra launcher plugins.
     """
     from exp_harness.run.api import run_hydra_sweep
 

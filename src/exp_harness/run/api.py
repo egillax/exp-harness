@@ -171,6 +171,13 @@ def run_hydra_sweep(
     stderr_tail_lines: int = 120,
     continue_on_error: bool = True,
 ) -> SweepResult:
+    """
+    Compose and execute a sweep using Hydra override syntax and exp-harness execution.
+
+    Sweep members are expanded from Hydra overrides, composed one-by-one, and run through
+    the canonical harness runner. This preserves the harness run/provenance model and does
+    not invoke Hydra launcher/sweeper plugins.
+    """
     root = project_root or discover_project_root_from_dir(Path.cwd())
     members = expand_hydra_sweep_overrides(overrides)
     runs: list[SweepMemberResult] = []

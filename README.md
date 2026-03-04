@@ -85,6 +85,8 @@ run-experiment sweep "name=myexp" "++params.lr=1e-3,1e-4" "resources=default,gpu
 
 `run-experiment run-hydra` is the preferred path for new experiments. `run-experiment run <spec.yaml>`
 remains available for compatibility with existing file-based specs.
+`run-experiment sweep` uses Hydra override syntax and composition, then executes members through
+the harness runner sequentially so runs/provenance stay in the canonical harness layout.
 
 `run-experiment run` streams step logs by default. Use `--no-follow-steps` to disable live streaming.
 Standard local experiments and sweeps do not require any bash wrapper scripts.
@@ -125,6 +127,13 @@ summary = run_hydra_sweep(
 )
 print(summary["total"], summary["succeeded"], summary["failed"])
 ```
+
+Sweep semantics:
+
+- Hydra is used for override parsing and per-member composition.
+- exp-harness expands and executes sweep members sequentially.
+- This keeps canonical harness run/provenance directories.
+- Hydra launcher/sweeper plugin execution (native Hydra multirun infrastructure) is not invoked.
 
 ## Overrides
 
