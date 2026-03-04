@@ -103,6 +103,60 @@ def compose_experiment_config(
     return cast(dict[str, Any], data)
 
 
+def _write_composed_spec(
+    *,
+    cfg: dict[str, Any],
+    output_dir: Path,
+    suffix: str,
+) -> Path:
+    name = str(cfg.get("name") or "experiment")
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-._") or "experiment"
+    spec_path = output_dir / f"{safe_name}__{suffix}.yaml"
+    spec_path.write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
+    return spec_path
+
+
+def run_hydra_experiment(
+    *,
+    overrides: Sequence[str] | None = None,
+    config_name: str = "config",
+    config_module: str = "exp_harness.conf",
+    project_root: Path | None = None,
+    runs_root: Path | None = None,
+    artifacts_root: Path | None = None,
+    salt: str | None = None,
+    run_label: str | None = None,
+    enforce_clean: bool = False,
+    follow_steps: bool = True,
+    stderr_tail_lines: int = 120,
+) -> RunResult:
+    root = project_root or discover_project_root_from_dir(Path.cwd())
+    cfg = compose_experiment_config(
+        overrides=overrides,
+        config_name=config_name,
+        config_module=config_module,
+    )
+    with TemporaryDirectory(prefix="exp-harness-hydra-run-") as tmp_dir:
+        spec_path = _write_composed_spec(
+            cfg=cfg,
+            output_dir=Path(tmp_dir),
+            suffix="hydra_run",
+        )
+        return run_experiment(
+            spec_path=spec_path,
+            set_overrides=[],
+            set_string_overrides=[],
+            project_root=root,
+            runs_root=runs_root,
+            artifacts_root=artifacts_root,
+            salt=salt,
+            run_label=run_label,
+            enforce_clean=enforce_clean,
+            follow_steps=follow_steps,
+            stderr_tail_lines=stderr_tail_lines,
+        )
+
+
 def run_hydra_sweep(
     *,
     overrides: Sequence[str] | None = None,
@@ -130,10 +184,11 @@ def run_hydra_sweep(
                     config_name=config_name,
                     config_module=config_module,
                 )
-                name = str(cfg.get("name") or "experiment")
-                safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-._") or "experiment"
-                spec_path = tmp_root / f"{safe_name}__sweep_{idx:03d}.yaml"
-                spec_path.write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
+                spec_path = _write_composed_spec(
+                    cfg=cfg,
+                    output_dir=tmp_root,
+                    suffix=f"sweep_{idx:03d}",
+                )
 
                 run_res = run_experiment(
                     spec_path=spec_path,

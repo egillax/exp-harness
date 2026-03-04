@@ -43,8 +43,8 @@ uv run pytest --cov=exp_harness --cov-report=term-missing
 ## Quick start
 
 ```bash
-run-experiment run examples/toy.yaml
-run-experiment run examples/toy_overlay.yaml
+run-experiment run-hydra "name=toy_hydra"
+run-experiment run examples/toy.yaml  # compatibility path for file-based specs
 run-experiment status
 ```
 
@@ -64,6 +64,12 @@ Override roots via CLI or env vars:
 ## CLI overview
 
 ```bash
+run-experiment run-hydra "name=myexp" "env=local" "++params.lr=1e-4" \
+  [--config-name config] \
+  [--salt myrun] [--run-label phase2_lr_micro_up] [--enforce-clean] \
+  [--no-follow-steps] [--stderr-tail-lines 120] \
+  [--runs-root /path/to/runs] [--artifacts-root /path/to/artifacts]
+
 run-experiment run spec.yaml \
   [--set params.x=3] [--set-str params.tag=001] \
   [--salt myrun] [--run-label phase2_lr_micro_up] [--enforce-clean] \
@@ -77,21 +83,19 @@ run-experiment locks gc [--grace-seconds 600] [--force] [--runs-root ...]
 run-experiment sweep "name=myexp" "++params.lr=1e-3,1e-4" "resources=default,gpu1"
 ```
 
+`run-experiment run-hydra` is the preferred path for new experiments. `run-experiment run <spec.yaml>`
+remains available for compatibility with existing file-based specs.
+
 `run-experiment run` streams step logs by default. Use `--no-follow-steps` to disable live streaming.
 Standard local experiments and sweeps do not require any bash wrapper scripts.
 
 ## Python API
 
 ```python
-from pathlib import Path
+from exp_harness.run.api import run_hydra_experiment
 
-from exp_harness.run.api import run_experiment
-
-result = run_experiment(
-    spec_path=Path("examples/toy.yaml"),
-    set_overrides=[("params.lr", "1e-4")],
-    runs_root=Path("experiment_results/runs"),
-    artifacts_root=Path("experiment_results/artifacts"),
+result = run_hydra_experiment(
+    overrides=["name=myexp", "env=local", "++params.lr=1e-4"],
     follow_steps=False,
 )
 print(result["run_key"])

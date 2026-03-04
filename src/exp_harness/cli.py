@@ -15,6 +15,82 @@ locks_app = typer.Typer(no_args_is_help=True)
 app.add_typer(locks_app, name="locks")
 
 
+@app.command("run-hydra")
+def run_hydra(
+    overrides: Annotated[
+        list[str] | None,
+        typer.Argument(
+            help="Hydra overrides for a single run, e.g. name=myexp ++params.lr=1e-4 resources=gpu1",
+        ),
+    ] = None,
+    config_name: Annotated[
+        str,
+        typer.Option(
+            "--config-name",
+            help="Hydra config name from exp_harness.conf",
+        ),
+    ] = "config",
+    runs_root: Annotated[
+        Path | None,
+        typer.Option("--runs-root", help=f"Override runs root (env: {ENV_RUNS_ROOT})"),
+    ] = None,
+    artifacts_root: Annotated[
+        Path | None,
+        typer.Option(
+            "--artifacts-root", help=f"Override artifacts root (env: {ENV_ARTIFACTS_ROOT})"
+        ),
+    ] = None,
+    salt: Annotated[
+        str | None, typer.Option("--salt", help="Run-key salt (forces new run identity)")
+    ] = None,
+    run_label: Annotated[
+        str | None,
+        typer.Option(
+            "--run-label",
+            help="Optional human label used in run directory naming (timestamp__label__hash).",
+        ),
+    ] = None,
+    enforce_clean: Annotated[
+        bool, typer.Option("--enforce-clean", help="Fail if git working tree is dirty")
+    ] = False,
+    follow_steps: Annotated[
+        bool,
+        typer.Option(
+            "--follow-steps/--no-follow-steps",
+            "--follow/--no-follow",
+            help="Stream step stdout/stderr to the terminal while running (still writes stdout.log/stderr.log).",
+        ),
+    ] = True,
+    stderr_tail_lines: Annotated[
+        int,
+        typer.Option(
+            "--stderr-tail-lines",
+            help="On step failure, print the last N lines of stderr.log (0 disables).",
+        ),
+    ] = 120,
+) -> None:
+    """
+    Run a single experiment composed from Hydra config groups and overrides.
+    """
+    from exp_harness.run.api import run_hydra_experiment
+
+    res = run_hydra_experiment(
+        overrides=overrides or [],
+        config_name=config_name,
+        runs_root=runs_root,
+        artifacts_root=artifacts_root,
+        salt=salt,
+        run_label=run_label,
+        enforce_clean=enforce_clean,
+        follow_steps=follow_steps,
+        stderr_tail_lines=stderr_tail_lines,
+    )
+    typer.echo(f"{res['name']} {res['run_key']}")
+    typer.echo(f"run_id: {res['run_id']}")
+    typer.echo(f"run_dir: {res['run_dir']}")
+    typer.echo(f"artifacts_dir: {res['artifacts_dir']}")
+
+
 @app.command()
 def run(
     spec: Annotated[Path, typer.Argument(exists=True, dir_okay=False, readable=True)],

@@ -198,3 +198,39 @@ def test_cli_passes_run_label_override(tmp_path: Path, monkeypatch) -> None:
     )
     assert res.exit_code == 0, res.stdout + res.stderr
     assert captured == ["from-cli"]
+
+
+def test_cli_run_hydra_invokes_hydra_api(tmp_path: Path, monkeypatch) -> None:
+    runs_root = tmp_path / "runs"
+    artifacts_root = tmp_path / "artifacts"
+    captured: dict[str, object] = {}
+
+    def _fake_run_hydra_experiment(**kwargs):
+        captured.update(kwargs)
+        return {
+            "name": "hydra_cli",
+            "run_id": "20260224-120000Z__hydra__abc12300",
+            "run_key": "abc123",
+            "run_dir": str(runs_root / "hydra_cli" / "abc123"),
+            "artifacts_dir": str(artifacts_root / "hydra_cli" / "abc123"),
+        }
+
+    monkeypatch.setattr("exp_harness.run.api.run_hydra_experiment", _fake_run_hydra_experiment)
+    runner = CliRunner()
+    res = runner.invoke(
+        app,
+        [
+            "run-hydra",
+            "name=hydra_cli",
+            "resources=default",
+            "--runs-root",
+            str(runs_root),
+            "--artifacts-root",
+            str(artifacts_root),
+            "--no-follow-steps",
+        ],
+    )
+    assert res.exit_code == 0, res.stdout + res.stderr
+    assert "hydra_cli abc123" in res.stdout
+    assert captured["overrides"] == ["name=hydra_cli", "resources=default"]
+    assert captured["follow_steps"] is False
