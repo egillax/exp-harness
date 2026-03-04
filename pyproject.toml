@@ -63,6 +63,6 @@ ignore = [
 
 [tool.basedpyright]
 pythonVersion = "3.12"
-typeCheckingMode = "basic"
+typeCheckingMode = "standard"
 include = ["src", "tests"]
 reportMissingTypeStubs = "none"

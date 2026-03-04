@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -52,8 +53,6 @@ def test_compose_experiment_config_supports_group_overrides() -> None:
 def test_compose_experiment_config_does_not_create_hydra_outputs(tmp_path: Path) -> None:
     old_cwd = Path.cwd()
     try:
-        import os
-
         os.chdir(tmp_path)
         _ = compose_experiment_config()
     finally:
