@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import json
-import sys
+import os
 from pathlib import Path
 
 from typer.testing import CliRunner
 
 from exp_harness.cli import app
-from tests.helpers import write_spec
 
 
 def test_cli_run_status_logs_inspect_and_locks_gc(tmp_path: Path) -> None:
@@ -16,53 +15,42 @@ def test_cli_run_status_logs_inspect_and_locks_gc(tmp_path: Path) -> None:
     runs_root = tmp_path / "runs"
     artifacts_root = tmp_path / "artifacts"
 
-    spec_fp = write_spec(
-        project_root,
-        {
-            "name": "cli",
-            "env": {"kind": "local"},
-            "steps": [{"id": "a", "cmd": [sys.executable, "-c", "print('hi')"]}],
-        },
-    )
-
     runner = CliRunner()
-    res = runner.invoke(
-        app,
-        [
-            "run",
-            str(spec_fp),
-            "--runs-root",
-            str(runs_root),
-            "--artifacts-root",
-            str(artifacts_root),
-            "--salt",
-            "s",
-            "--follow-steps",
-            "--stderr-tail-lines",
-            "0",
-        ],
-    )
-    assert res.exit_code == 0, res.stdout + res.stderr
-    lines = res.stdout.splitlines()
-    summary = next((ln for ln in lines if ln.startswith("cli ")), "")
-    assert summary, f"missing summary line in stdout:\n{res.stdout}"
-    parts = summary.split()
-    assert parts[0] == "cli"
-    run_key = parts[1]
-
-    import os
-
     old_cwd = os.getcwd()
     try:
         os.chdir(project_root)
+        res = runner.invoke(
+            app,
+            [
+                "run",
+                "name=cli",
+                "--runs-root",
+                str(runs_root),
+                "--artifacts-root",
+                str(artifacts_root),
+                "--salt",
+                "s",
+                "--follow-steps",
+                "--stderr-tail-lines",
+                "0",
+            ],
+        )
+        assert res.exit_code == 0, res.stdout + res.stderr
+        lines = res.stdout.splitlines()
+        summary = next((ln for ln in lines if ln.startswith("cli ")), "")
+        assert summary, f"missing summary line in stdout:\n{res.stdout}"
+        parts = summary.split()
+        assert parts[0] == "cli"
+        run_key = parts[1]
+
         res2 = runner.invoke(app, ["status", "--runs-root", str(runs_root), "--limit", "5"])
+        assert res2.exit_code == 0
+        assert run_key in res2.stdout
     finally:
         os.chdir(old_cwd)
-    assert res2.exit_code == 0
-    assert run_key in res2.stdout
 
     res3 = runner.invoke(
-        app, ["logs", "cli", run_key, "--runs-root", str(runs_root), "--step", "a"]
+        app, ["logs", "cli", run_key, "--runs-root", str(runs_root), "--step", "main"]
     )
     assert res3.exit_code == 0
     assert "stdout.log" in res3.stdout
@@ -95,19 +83,8 @@ def test_cli_run_status_logs_inspect_and_locks_gc(tmp_path: Path) -> None:
 
 
 def test_cli_run_defaults_follow_steps_true_and_allows_opt_out(tmp_path: Path, monkeypatch) -> None:
-    project_root = tmp_path / "project"
-    project_root.mkdir()
     runs_root = tmp_path / "runs"
     artifacts_root = tmp_path / "artifacts"
-
-    spec_fp = write_spec(
-        project_root,
-        {
-            "name": "cli",
-            "env": {"kind": "local"},
-            "steps": [{"id": "a", "cmd": [sys.executable, "-c", "print('hi')"]}],
-        },
-    )
 
     captured: list[bool] = []
 
@@ -128,7 +105,7 @@ def test_cli_run_defaults_follow_steps_true_and_allows_opt_out(tmp_path: Path, m
         app,
         [
             "run",
-            str(spec_fp),
+            "name=cli",
             "--runs-root",
             str(runs_root),
             "--artifacts-root",
@@ -142,7 +119,7 @@ def test_cli_run_defaults_follow_steps_true_and_allows_opt_out(tmp_path: Path, m
         app,
         [
             "run",
-            str(spec_fp),
+            "name=cli",
             "--runs-root",
             str(runs_root),
             "--artifacts-root",
@@ -155,19 +132,8 @@ def test_cli_run_defaults_follow_steps_true_and_allows_opt_out(tmp_path: Path, m
 
 
 def test_cli_passes_run_label_override(tmp_path: Path, monkeypatch) -> None:
-    project_root = tmp_path / "project"
-    project_root.mkdir()
     runs_root = tmp_path / "runs"
     artifacts_root = tmp_path / "artifacts"
-    spec_fp = write_spec(
-        project_root,
-        {
-            "name": "cli",
-            "run_label": "from-spec",
-            "env": {"kind": "local"},
-            "steps": [{"id": "a", "cmd": [sys.executable, "-c", "print('hi')"]}],
-        },
-    )
 
     captured: list[str | None] = []
 
@@ -187,7 +153,7 @@ def test_cli_passes_run_label_override(tmp_path: Path, monkeypatch) -> None:
         app,
         [
             "run",
-            str(spec_fp),
+            "name=cli",
             "--runs-root",
             str(runs_root),
             "--artifacts-root",
@@ -200,12 +166,12 @@ def test_cli_passes_run_label_override(tmp_path: Path, monkeypatch) -> None:
     assert captured == ["from-cli"]
 
 
-def test_cli_run_hydra_invokes_hydra_api(tmp_path: Path, monkeypatch) -> None:
+def test_cli_run_invokes_hydra_api_with_overrides(tmp_path: Path, monkeypatch) -> None:
     runs_root = tmp_path / "runs"
     artifacts_root = tmp_path / "artifacts"
     captured: dict[str, object] = {}
 
-    def _fake_run_hydra_experiment(**kwargs):
+    def _fake_run_experiment(**kwargs):
         captured.update(kwargs)
         return {
             "name": "hydra_cli",
@@ -215,12 +181,12 @@ def test_cli_run_hydra_invokes_hydra_api(tmp_path: Path, monkeypatch) -> None:
             "artifacts_dir": str(artifacts_root / "hydra_cli" / "abc123"),
         }
 
-    monkeypatch.setattr("exp_harness.run.api.run_hydra_experiment", _fake_run_hydra_experiment)
+    monkeypatch.setattr("exp_harness.run.api.run_experiment", _fake_run_experiment)
     runner = CliRunner()
     res = runner.invoke(
         app,
         [
-            "run-hydra",
+            "run",
             "name=hydra_cli",
             "resources=default",
             "--runs-root",

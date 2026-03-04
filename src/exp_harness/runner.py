@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 from exp_harness.config import Roots
 from exp_harness.docker_utils import inspect_image
@@ -9,7 +12,7 @@ from exp_harness.errors import GitDirtyWorktreeError
 from exp_harness.executors.docker import DockerExecutor
 from exp_harness.executors.local import LocalExecutor
 from exp_harness.provenance.git import collect_git_info
-from exp_harness.resolve import apply_computed_defaults, load_and_validate
+from exp_harness.resolve import apply_computed_defaults
 from exp_harness.run.identity import build_run_identity
 from exp_harness.run.phases import (
     ResourceAllocation,
@@ -20,7 +23,20 @@ from exp_harness.run.phases import (
     phase_release_resources,
 )
 from exp_harness.run.state import mark_failed_with_traceback, mark_interrupted, mark_succeeded
+from exp_harness.spec import ExperimentSpec
 from exp_harness.store import write_run_json
+
+
+def _load_spec_mapping(spec_path: Path) -> dict[str, Any]:
+    raw = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError(f"Spec YAML must be a mapping at the top level: {spec_path}")
+    if raw.get("extends") is not None:
+        raise ValueError(
+            "`extends` is no longer supported; use Hydra config groups and overrides instead"
+        )
+    ExperimentSpec.model_validate(raw)
+    return raw
 
 
 def run_experiment(
@@ -35,11 +51,12 @@ def run_experiment(
     follow_steps: bool = False,
     stderr_tail_lines: int = 120,
 ) -> dict[str, str]:
-    raw_base = load_and_validate(
-        spec_path=spec_path,
-        set_overrides=set_overrides,
-        set_string_overrides=set_string_overrides,
-    )
+    if set_overrides or set_string_overrides:
+        raise ValueError(
+            "`--set`/`--set-str` overrides are no longer supported; use Hydra overrides"
+        )
+
+    raw_base = _load_spec_mapping(spec_path)
     kind = (raw_base.get("env") or {}).get("kind", "local")
     raw_base = apply_computed_defaults(raw_base, project_root=roots.project_root, kind=kind)
     name = str(raw_base.get("name"))

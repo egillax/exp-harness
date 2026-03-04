@@ -7,7 +7,6 @@ from typing import Annotated, Any
 import typer
 
 from exp_harness.config import ENV_ARTIFACTS_ROOT, ENV_RUNS_ROOT, resolve_roots
-from exp_harness.run.api import OverrideParseError, parse_set_overrides
 from exp_harness.utils import discover_project_root_from_dir
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
@@ -15,8 +14,8 @@ locks_app = typer.Typer(no_args_is_help=True)
 app.add_typer(locks_app, name="locks")
 
 
-@app.command("run-hydra")
-def run_hydra(
+@app.command()
+def run(
     overrides: Annotated[
         list[str] | None,
         typer.Argument(
@@ -72,94 +71,11 @@ def run_hydra(
     """
     Run a single experiment composed from Hydra config groups and overrides.
     """
-    from exp_harness.run.api import run_hydra_experiment
-
-    res = run_hydra_experiment(
-        overrides=overrides or [],
-        config_name=config_name,
-        runs_root=runs_root,
-        artifacts_root=artifacts_root,
-        salt=salt,
-        run_label=run_label,
-        enforce_clean=enforce_clean,
-        follow_steps=follow_steps,
-        stderr_tail_lines=stderr_tail_lines,
-    )
-    typer.echo(f"{res['name']} {res['run_key']}")
-    typer.echo(f"run_id: {res['run_id']}")
-    typer.echo(f"run_dir: {res['run_dir']}")
-    typer.echo(f"artifacts_dir: {res['artifacts_dir']}")
-
-
-@app.command()
-def run(
-    spec: Annotated[Path, typer.Argument(exists=True, dir_okay=False, readable=True)],
-    set_: Annotated[
-        list[str] | None,
-        typer.Option("--set", help="Override values (YAML-parsed), e.g. params.x=3"),
-    ] = None,
-    set_str: Annotated[
-        list[str] | None,
-        typer.Option("--set-str", "--set-string", help="Override values as strings"),
-    ] = None,
-    runs_root: Annotated[
-        Path | None,
-        typer.Option(
-            "--runs-root",
-            help=f"Override runs root (env: {ENV_RUNS_ROOT})",
-        ),
-    ] = None,
-    artifacts_root: Annotated[
-        Path | None,
-        typer.Option(
-            "--artifacts-root",
-            help=f"Override artifacts root (env: {ENV_ARTIFACTS_ROOT})",
-        ),
-    ] = None,
-    salt: Annotated[
-        str | None, typer.Option("--salt", help="Run-key salt (forces new run identity)")
-    ] = None,
-    run_label: Annotated[
-        str | None,
-        typer.Option(
-            "--run-label",
-            help="Optional human label used in run directory naming (timestamp__label__hash).",
-        ),
-    ] = None,
-    enforce_clean: Annotated[
-        bool, typer.Option("--enforce-clean", help="Fail if git working tree is dirty")
-    ] = False,
-    follow_steps: Annotated[
-        bool,
-        typer.Option(
-            "--follow-steps/--no-follow-steps",
-            "--follow/--no-follow",
-            help="Stream step stdout/stderr to the terminal while running (still writes stdout.log/stderr.log).",
-        ),
-    ] = True,
-    stderr_tail_lines: Annotated[
-        int,
-        typer.Option(
-            "--stderr-tail-lines",
-            help="On step failure, print the last N lines of stderr.log (0 disables).",
-        ),
-    ] = 120,
-) -> None:
-    """
-    Run a multi-step experiment from a YAML spec.
-    """
     from exp_harness.run.api import run_experiment
 
-    try:
-        set_kv = parse_set_overrides(set_ or [])
-        set_str_kv = parse_set_overrides(set_str or [])
-    except OverrideParseError as e:
-        raise typer.BadParameter(str(e)) from e
-
     res = run_experiment(
-        spec_path=spec,
-        set_overrides=set_kv,
-        set_string_overrides=set_str_kv,
+        overrides=overrides or [],
+        config_name=config_name,
         runs_root=runs_root,
         artifacts_root=artifacts_root,
         salt=salt,

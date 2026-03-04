@@ -14,11 +14,7 @@ from omegaconf import OmegaConf
 
 from exp_harness.config import resolve_roots
 from exp_harness.spec import ExperimentSpec
-from exp_harness.utils import discover_project_root, discover_project_root_from_dir
-
-
-class OverrideParseError(ValueError):
-    """Raised when a --set/--set-str assignment is not in KEY=VALUE form."""
+from exp_harness.utils import discover_project_root_from_dir
 
 
 class ComposeConfigError(ValueError):
@@ -46,19 +42,6 @@ class SweepResult(TypedDict):
     succeeded: int
     failed: int
     runs: list[SweepMemberResult]
-
-
-def parse_set_overrides(values: Sequence[str]) -> list[tuple[str, str]]:
-    parsed: list[tuple[str, str]] = []
-    for value in values:
-        if "=" not in value:
-            raise OverrideParseError("Expected KEY=VALUE")
-        key, rhs = value.split("=", 1)
-        key = key.strip()
-        if not key:
-            raise OverrideParseError("Empty key")
-        parsed.append((key, rhs))
-    return parsed
 
 
 def expand_hydra_sweep_overrides(overrides: Sequence[str] | None = None) -> list[list[str]]:
@@ -116,7 +99,74 @@ def _write_composed_spec(
     return spec_path
 
 
-def run_hydra_experiment(
+def _run_spec_file(
+    *,
+    spec_path: Path,
+    project_root: Path,
+    runs_root: Path | None,
+    artifacts_root: Path | None,
+    salt: str | None,
+    run_label: str | None,
+    enforce_clean: bool,
+    follow_steps: bool,
+    stderr_tail_lines: int,
+) -> RunResult:
+    from exp_harness.runner import run_experiment as _run_experiment
+
+    roots = resolve_roots(
+        project_root=project_root,
+        runs_root=runs_root,
+        artifacts_root=artifacts_root,
+    )
+    return cast(
+        RunResult,
+        _run_experiment(
+            spec_path=spec_path,
+            roots=roots,
+            set_overrides=[],
+            set_string_overrides=[],
+            salt=salt,
+            run_label=run_label,
+            enforce_clean=enforce_clean,
+            follow_steps=follow_steps,
+            stderr_tail_lines=stderr_tail_lines,
+        ),
+    )
+
+
+def _run_composed_experiment(
+    *,
+    cfg: dict[str, Any],
+    project_root: Path,
+    runs_root: Path | None,
+    artifacts_root: Path | None,
+    salt: str | None,
+    run_label: str | None,
+    enforce_clean: bool,
+    follow_steps: bool,
+    stderr_tail_lines: int,
+    suffix: str,
+) -> RunResult:
+    with TemporaryDirectory(prefix="exp-harness-hydra-run-") as tmp_dir:
+        spec_path = _write_composed_spec(
+            cfg=cfg,
+            output_dir=Path(tmp_dir),
+            suffix=suffix,
+        )
+        return _run_spec_file(
+            spec_path=spec_path,
+            project_root=project_root,
+            runs_root=runs_root,
+            artifacts_root=artifacts_root,
+            salt=salt,
+            run_label=run_label,
+            enforce_clean=enforce_clean,
+            follow_steps=follow_steps,
+            stderr_tail_lines=stderr_tail_lines,
+        )
+
+
+def run_experiment(
     *,
     overrides: Sequence[str] | None = None,
     config_name: str = "config",
@@ -130,31 +180,27 @@ def run_hydra_experiment(
     follow_steps: bool = True,
     stderr_tail_lines: int = 120,
 ) -> RunResult:
+    """
+    Run a single experiment composed from Hydra config groups and overrides.
+    """
     root = project_root or discover_project_root_from_dir(Path.cwd())
     cfg = compose_experiment_config(
         overrides=overrides,
         config_name=config_name,
         config_module=config_module,
     )
-    with TemporaryDirectory(prefix="exp-harness-hydra-run-") as tmp_dir:
-        spec_path = _write_composed_spec(
-            cfg=cfg,
-            output_dir=Path(tmp_dir),
-            suffix="hydra_run",
-        )
-        return run_experiment(
-            spec_path=spec_path,
-            set_overrides=[],
-            set_string_overrides=[],
-            project_root=root,
-            runs_root=runs_root,
-            artifacts_root=artifacts_root,
-            salt=salt,
-            run_label=run_label,
-            enforce_clean=enforce_clean,
-            follow_steps=follow_steps,
-            stderr_tail_lines=stderr_tail_lines,
-        )
+    return _run_composed_experiment(
+        cfg=cfg,
+        project_root=root,
+        runs_root=runs_root,
+        artifacts_root=artifacts_root,
+        salt=salt,
+        run_label=run_label,
+        enforce_clean=enforce_clean,
+        follow_steps=follow_steps,
+        stderr_tail_lines=stderr_tail_lines,
+        suffix="hydra_run",
+    )
 
 
 def run_hydra_sweep(
@@ -182,55 +228,46 @@ def run_hydra_sweep(
     members = expand_hydra_sweep_overrides(overrides)
     runs: list[SweepMemberResult] = []
 
-    with TemporaryDirectory(prefix="exp-harness-hydra-sweep-") as tmp_dir:
-        tmp_root = Path(tmp_dir)
-        for idx, member_overrides in enumerate(members, start=1):
-            try:
-                cfg = compose_experiment_config(
-                    overrides=member_overrides,
-                    config_name=config_name,
-                    config_module=config_module,
-                )
-                spec_path = _write_composed_spec(
-                    cfg=cfg,
-                    output_dir=tmp_root,
-                    suffix=f"sweep_{idx:03d}",
-                )
-
-                run_res = run_experiment(
-                    spec_path=spec_path,
-                    set_overrides=[],
-                    set_string_overrides=[],
-                    project_root=root,
-                    runs_root=runs_root,
-                    artifacts_root=artifacts_root,
-                    salt=salt,
-                    run_label=f"sweep-{idx:03d}",
-                    enforce_clean=enforce_clean,
-                    follow_steps=follow_steps,
-                    stderr_tail_lines=stderr_tail_lines,
-                )
-                runs.append(
-                    {
-                        "index": idx,
-                        "overrides": list(member_overrides),
-                        "status": "succeeded",
-                        "result": run_res,
-                        "error": None,
-                    }
-                )
-            except Exception as exc:
-                runs.append(
-                    {
-                        "index": idx,
-                        "overrides": list(member_overrides),
-                        "status": "failed",
-                        "result": None,
-                        "error": str(exc),
-                    }
-                )
-                if not continue_on_error:
-                    break
+    for idx, member_overrides in enumerate(members, start=1):
+        try:
+            cfg = compose_experiment_config(
+                overrides=member_overrides,
+                config_name=config_name,
+                config_module=config_module,
+            )
+            run_res = _run_composed_experiment(
+                cfg=cfg,
+                project_root=root,
+                runs_root=runs_root,
+                artifacts_root=artifacts_root,
+                salt=salt,
+                run_label=f"sweep-{idx:03d}",
+                enforce_clean=enforce_clean,
+                follow_steps=follow_steps,
+                stderr_tail_lines=stderr_tail_lines,
+                suffix=f"sweep_{idx:03d}",
+            )
+            runs.append(
+                {
+                    "index": idx,
+                    "overrides": list(member_overrides),
+                    "status": "succeeded",
+                    "result": run_res,
+                    "error": None,
+                }
+            )
+        except Exception as exc:
+            runs.append(
+                {
+                    "index": idx,
+                    "overrides": list(member_overrides),
+                    "status": "failed",
+                    "result": None,
+                    "error": str(exc),
+                }
+            )
+            if not continue_on_error:
+                break
 
     succeeded = sum(1 for item in runs if item["status"] == "succeeded")
     failed = len(runs) - succeeded
@@ -240,41 +277,3 @@ def run_hydra_sweep(
         "failed": failed,
         "runs": runs,
     }
-
-
-def run_experiment(
-    *,
-    spec_path: Path,
-    set_overrides: Sequence[tuple[str, str]] | None = None,
-    set_string_overrides: Sequence[tuple[str, str]] | None = None,
-    project_root: Path | None = None,
-    runs_root: Path | None = None,
-    artifacts_root: Path | None = None,
-    salt: str | None = None,
-    run_label: str | None = None,
-    enforce_clean: bool = False,
-    follow_steps: bool = True,
-    stderr_tail_lines: int = 120,
-) -> RunResult:
-    from exp_harness.runner import run_experiment as _run_experiment
-
-    resolved_project_root = project_root or discover_project_root(spec_path)
-    roots = resolve_roots(
-        project_root=resolved_project_root,
-        runs_root=runs_root,
-        artifacts_root=artifacts_root,
-    )
-    return cast(
-        RunResult,
-        _run_experiment(
-            spec_path=spec_path,
-            roots=roots,
-            set_overrides=list(set_overrides or []),
-            set_string_overrides=list(set_string_overrides or []),
-            salt=salt,
-            run_label=run_label,
-            enforce_clean=enforce_clean,
-            follow_steps=follow_steps,
-            stderr_tail_lines=stderr_tail_lines,
-        ),
-    )

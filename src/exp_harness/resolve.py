@@ -1,134 +1,11 @@
 from __future__ import annotations
 
-import logging
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from exp_harness.interp import InterpError, resolve_obj
-from exp_harness.spec import ExperimentSpec
+from exp_harness.spec import StepSpec
 from exp_harness.utils import resolve_relpath
-
-logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class ResolvedSpec:
-    spec: ExperimentSpec
-    raw: dict[str, Any]
-    resolved_dict: dict[str, Any]
-
-
-def _set_in_dict(root: dict[str, Any], path: str, value: Any) -> None:
-    parts = path.split(".")
-    cur: Any = root
-    for part in parts[:-1]:
-        if not isinstance(cur, dict):
-            raise ValueError(f"Cannot set {path}: {part} is not a dict")
-        if part not in cur or cur[part] is None:
-            cur[part] = {}
-        cur = cur[part]
-    last = parts[-1]
-    if not isinstance(cur, dict):
-        raise ValueError(f"Cannot set {path}: parent is not a dict")
-    cur[last] = value
-
-
-def _parse_yaml_value(s: str) -> Any:
-    v = yaml.safe_load(s)
-    # If user passes nothing/blank, keep it as empty string (avoid surprising null).
-    if v is None and s.strip() == "":
-        return ""
-    return v
-
-
-def _load_yaml_mapping(path: Path) -> dict[str, Any]:
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if not isinstance(raw, dict):
-        raise ValueError(f"Spec YAML must be a mapping at the top level: {path}")
-    return raw
-
-
-def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
-    out: dict[str, Any] = dict(base)
-    for k, v in overlay.items():
-        if k == "extends":
-            continue
-        if k in out and isinstance(out[k], dict) and isinstance(v, dict):
-            out[k] = _deep_merge(out[k], v)
-        else:
-            # Lists (e.g. steps) are replaced rather than merged.
-            out[k] = v
-    return out
-
-
-def _apply_extends(
-    raw: dict[str, Any], *, spec_path: Path, _stack: tuple[Path, ...] = ()
-) -> dict[str, Any]:
-    """
-    Support a lightweight "extends" preprocessor for specs.
-
-    - `extends: base.yaml` (or list of paths)
-    - Base specs are deep-merged, then the current spec overlays them.
-    - Dicts are merged recursively; lists are replaced.
-    - `extends` is removed from the effective spec so it doesn't affect run identity hashing.
-    """
-    rp = spec_path.resolve()
-    if rp in _stack:
-        chain = " -> ".join(str(x) for x in (_stack + (rp,)))
-        raise ValueError(f"extends cycle detected: {chain}")
-    stack = _stack + (rp,)
-
-    extends = raw.get("extends")
-    if extends is None:
-        out = dict(raw)
-        out.pop("extends", None)
-        return out
-
-    if isinstance(extends, str):
-        extend_paths = [extends]
-    elif isinstance(extends, list) and all(isinstance(x, str) for x in extends):
-        extend_paths = list(extends)
-    else:
-        raise ValueError("extends must be a string path or a list of string paths")
-
-    merged: dict[str, Any] = {}
-
-    for rel in extend_paths:
-        p = resolve_relpath(rel, base_dir=spec_path.parent)
-        base_raw = _load_yaml_mapping(p)
-        base_spec = _apply_extends(base_raw, spec_path=p, _stack=stack)
-        merged = _deep_merge(merged, base_spec)
-
-    merged = _deep_merge(merged, raw)
-    merged.pop("extends", None)
-    return merged
-
-
-def load_and_validate(
-    *,
-    spec_path: Path,
-    set_overrides: list[tuple[str, str]],
-    set_string_overrides: list[tuple[str, str]],
-) -> dict[str, Any]:
-    raw = _load_yaml_mapping(spec_path)
-    if raw.get("extends") is not None:
-        logger.warning(
-            "legacy `extends` layering is compatibility mode for file-based specs; "
-            "prefer Hydra config groups and `run-experiment run-hydra` for new runs"
-        )
-    raw = _apply_extends(raw, spec_path=spec_path)
-
-    for k, v in set_overrides:
-        _set_in_dict(raw, k, _parse_yaml_value(v))
-    for k, v in set_string_overrides:
-        _set_in_dict(raw, k, v)
-
-    # Validate structure early (types may still include interpolation placeholders).
-    ExperimentSpec.model_validate(raw)
-    return raw
 
 
 def apply_computed_defaults(
@@ -149,10 +26,7 @@ def apply_computed_defaults(
     if "gpus" not in resources:
         resources["gpus"] = 0
 
-    steps = data.get("steps") or []
-    for step in steps:
-        if not isinstance(step, dict):
-            continue
+    for step in _iter_step_dicts(data.get("steps")):
         outputs = step.get("outputs")
         if outputs is None:
             outputs = {}
@@ -207,6 +81,18 @@ def _build_interp_ctx(
     _add_flat("params", params, overwrite=False)
     ctx.update(flat)
     return ctx
+
+
+def _iter_step_dicts(steps: Any) -> list[dict[str, Any]]:
+    if not isinstance(steps, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for step in steps:
+        if isinstance(step, StepSpec):
+            out.append(step.model_dump(mode="python"))
+        elif isinstance(step, dict):
+            out.append(step)
+    return out
 
 
 def resolve_for_hashing(

@@ -43,8 +43,7 @@ uv run pytest --cov=exp_harness --cov-report=term-missing
 ## Quick start
 
 ```bash
-run-experiment run-hydra "name=toy_hydra"
-run-experiment run examples/toy.yaml  # compatibility path for file-based specs
+run-experiment run "name=toy_hydra"
 run-experiment status
 ```
 
@@ -64,14 +63,8 @@ Override roots via CLI or env vars:
 ## CLI overview
 
 ```bash
-run-experiment run-hydra "name=myexp" "env=local" "++params.lr=1e-4" \
+run-experiment run "name=myexp" "env=local" "++params.lr=1e-4" \
   [--config-name config] \
-  [--salt myrun] [--run-label phase2_lr_micro_up] [--enforce-clean] \
-  [--no-follow-steps] [--stderr-tail-lines 120] \
-  [--runs-root /path/to/runs] [--artifacts-root /path/to/artifacts]
-
-run-experiment run spec.yaml \
-  [--set params.x=3] [--set-str params.tag=001] \
   [--salt myrun] [--run-label phase2_lr_micro_up] [--enforce-clean] \
   [--no-follow-steps] [--stderr-tail-lines 120] \
   [--runs-root /path/to/runs] [--artifacts-root /path/to/artifacts]
@@ -83,8 +76,6 @@ run-experiment locks gc [--grace-seconds 600] [--force] [--runs-root ...]
 run-experiment sweep "name=myexp" "++params.lr=1e-3,1e-4" "resources=default,gpu1"
 ```
 
-`run-experiment run-hydra` is the preferred path for new experiments. `run-experiment run <spec.yaml>`
-remains available for compatibility with existing file-based specs.
 `run-experiment sweep` uses Hydra override syntax and composition, then executes members through
 the harness runner sequentially so runs/provenance stay in the canonical harness layout.
 
@@ -94,9 +85,9 @@ Standard local experiments and sweeps do not require any bash wrapper scripts.
 ## Python API
 
 ```python
-from exp_harness.run.api import run_hydra_experiment
+from exp_harness.run.api import run_experiment
 
-result = run_hydra_experiment(
+result = run_experiment(
     overrides=["name=myexp", "env=local", "++params.lr=1e-4"],
     follow_steps=False,
 )
@@ -137,18 +128,10 @@ Sweep semantics:
 
 ## Overrides
 
-- `run-hydra` / `sweep` use Hydra override syntax (`group=value`, `+key=value`, `++key=value`, comma sweeps).
-- `run --set params.x=...` parses the RHS as YAML (so `3`, `true`, `[1,2]` work).
-- `run --set-str params.x=...` forces the RHS to be a string.
-
-## Legacy File-Spec Compatibility
-
-- File-based specs (`run <spec.yaml>`) remain supported for existing workflows.
-- `extends` layering is compatibility mode for file specs; new workflows should prefer Hydra config groups and overrides.
+- `run` / `sweep` use Hydra override syntax (`group=value`, `+key=value`, `++key=value`, comma sweeps).
 
 ## Spec schema (minimal reference)
 
-- `extends` (optional, compatibility mode): path (or list of paths) to a base spec to merge in first
 - `name` (required): experiment name
 - `run_label` (optional): human label used in run directory naming
 - `env.kind`: `local|docker` (default: `local`)

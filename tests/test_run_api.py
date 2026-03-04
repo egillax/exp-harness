@@ -2,36 +2,14 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from pathlib import Path
 
-import pytest
-import yaml
-
 from exp_harness.run.api import (
-    OverrideParseError,
     compose_experiment_config,
     expand_hydra_sweep_overrides,
-    parse_set_overrides,
     run_experiment,
-    run_hydra_experiment,
     run_hydra_sweep,
 )
-from tests.helpers import write_spec
-
-
-def test_parse_set_overrides_parses_key_value_pairs() -> None:
-    assert parse_set_overrides(["params.x=3", "params.y = abc"]) == [
-        ("params.x", "3"),
-        ("params.y", " abc"),
-    ]
-
-
-def test_parse_set_overrides_errors_on_invalid_assignments() -> None:
-    with pytest.raises(OverrideParseError, match="Expected KEY=VALUE"):
-        parse_set_overrides(["params.x"])
-    with pytest.raises(OverrideParseError, match="Empty key"):
-        parse_set_overrides(["=1"])
 
 
 def test_compose_experiment_config_defaults_are_valid() -> None:
@@ -71,21 +49,23 @@ def test_expand_hydra_sweep_overrides_builds_cartesian_product() -> None:
 
 
 def test_run_hydra_sweep_collects_partial_failures(tmp_path: Path, monkeypatch) -> None:
-    def _fake_run_experiment(**kwargs):
-        spec_path = Path(kwargs["spec_path"])
-        spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
-        kind = str(spec.get("env", {}).get("kind"))
+    def _fake_run_composed_experiment(**kwargs):
+        cfg = kwargs["cfg"]
+        assert isinstance(cfg, dict)
+        kind = str((cfg.get("env") or {}).get("kind"))
         if kind == "docker":
             raise RuntimeError("docker boom")
         return {
-            "name": str(spec.get("name")),
+            "name": str(cfg.get("name")),
             "run_id": f"run-{kind}",
             "run_key": f"key-{kind}",
             "run_dir": str(tmp_path / "runs" / f"run-{kind}"),
             "artifacts_dir": str(tmp_path / "artifacts" / f"run-{kind}"),
         }
 
-    monkeypatch.setattr("exp_harness.run.api.run_experiment", _fake_run_experiment)
+    monkeypatch.setattr(
+        "exp_harness.run.api._run_composed_experiment", _fake_run_composed_experiment
+    )
     result = run_hydra_sweep(
         overrides=["name=sweep_api", "env=local,docker"],
         project_root=tmp_path,
@@ -99,59 +79,45 @@ def test_run_hydra_sweep_collects_partial_failures(tmp_path: Path, monkeypatch) 
     assert failed[0]["error"] == "docker boom"
 
 
-def test_run_hydra_experiment_composes_config_and_invokes_runner(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_run_experiment_composes_config_and_invokes_runner(tmp_path: Path, monkeypatch) -> None:
     captured: dict[str, object] = {}
 
-    def _fake_run_experiment(**kwargs):
-        spec_path = Path(kwargs["spec_path"])
-        spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
-        captured["spec"] = spec
-        captured["kwargs"] = kwargs
+    def _fake_run_composed_experiment(**kwargs):
+        captured.update(kwargs)
+        cfg = kwargs["cfg"]
+        assert isinstance(cfg, dict)
         return {
-            "name": str(spec.get("name")),
+            "name": str(cfg.get("name")),
             "run_id": "run-local",
             "run_key": "key-local",
             "run_dir": str(tmp_path / "runs" / "run-local"),
             "artifacts_dir": str(tmp_path / "artifacts" / "run-local"),
         }
 
-    monkeypatch.setattr("exp_harness.run.api.run_experiment", _fake_run_experiment)
-    result = run_hydra_experiment(
+    monkeypatch.setattr(
+        "exp_harness.run.api._run_composed_experiment", _fake_run_composed_experiment
+    )
+    result = run_experiment(
         overrides=["name=hydra_single", "++params.lr=1e-4"],
         project_root=tmp_path,
         run_label="from-cli",
     )
 
     assert result["name"] == "hydra_single"
-    spec = captured["spec"]
-    assert isinstance(spec, dict)
-    assert spec["name"] == "hydra_single"
-    assert spec["params"]["lr"] == 0.0001
-    kwargs = captured["kwargs"]
-    assert isinstance(kwargs, dict)
-    assert kwargs["run_label"] == "from-cli"
+    cfg = captured["cfg"]
+    assert isinstance(cfg, dict)
+    assert cfg["name"] == "hydra_single"
+    assert cfg["params"]["lr"] == 0.0001
+    assert captured["run_label"] == "from-cli"
 
 
-def test_run_experiment_api_runs_spec_and_applies_overrides(tmp_path: Path) -> None:
-    project_root = tmp_path / "project"
-    project_root.mkdir()
+def test_run_experiment_api_runs_hydra_config(tmp_path: Path) -> None:
     runs_root = tmp_path / "runs"
     artifacts_root = tmp_path / "artifacts"
-    spec_fp = write_spec(
-        project_root,
-        {
-            "name": "api",
-            "env": {"kind": "local"},
-            "steps": [{"id": "a", "cmd": [sys.executable, "-c", "print('hi')"]}],
-        },
-    )
 
     result = run_experiment(
-        spec_path=spec_fp,
-        set_overrides=[("params.x", "7")],
-        set_string_overrides=[("params.tag", "001")],
+        overrides=["name=api", "++params.x=7", "++params.tag='001'"],
+        project_root=tmp_path,
         runs_root=runs_root,
         artifacts_root=artifacts_root,
         salt="from-api",

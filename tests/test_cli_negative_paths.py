@@ -1,39 +1,21 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 from typer.testing import CliRunner
 
 from exp_harness.cli import app
-from tests.helpers import write_spec
 
 
-def test_cli_set_requires_equals(tmp_path: Path) -> None:
-    project_root = tmp_path / "project"
-    project_root.mkdir()
-    spec_fp = write_spec(
-        project_root,
-        {
-            "name": "cli2",
-            "env": {"kind": "local"},
-            "steps": [{"id": "a", "cmd": [sys.executable, "-c", "print('hi')"]}],
-        },
-    )
+def test_cli_run_rejects_invalid_hydra_override_syntax() -> None:
     runner = CliRunner()
-    res = runner.invoke(app, ["run", str(spec_fp), "--set", "params.x"])
+    res = runner.invoke(app, ["run", "params.x"])
     assert res.exit_code != 0
-    assert "Expected KEY=VALUE" in (res.stdout + res.stderr)
+    assert res.exception is not None
+    assert "Error parsing override" in str(res.exception)
 
 
-def test_cli_set_empty_key(tmp_path: Path) -> None:
-    project_root = tmp_path / "project"
-    project_root.mkdir()
-    spec_fp = write_spec(
-        project_root,
-        {"name": "cli3", "env": {"kind": "local"}, "steps": [{"id": "a", "cmd": ["echo", "hi"]}]},
-    )
+def test_cli_run_rejects_removed_set_flag() -> None:
     runner = CliRunner()
-    res = runner.invoke(app, ["run", str(spec_fp), "--set", "=1"])
+    res = runner.invoke(app, ["run", "name=demo", "--set", "params.x=1"])
     assert res.exit_code != 0
-    assert "Empty key" in (res.stdout + res.stderr)
+    out = res.stdout + res.stderr
+    assert "No such option: --set" in out
