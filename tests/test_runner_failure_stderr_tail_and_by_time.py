@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from pathlib import Path
 
@@ -13,7 +14,7 @@ from exp_harness.runner import run_experiment
 
 
 def test_step_failure_records_stderr_tail_and_uses_human_readable_run_id(
-    tmp_path: Path, capsys
+    tmp_path: Path, caplog
 ) -> None:
     roots = Roots(
         project_root=tmp_path, runs_root=tmp_path / "runs", artifacts_root=tmp_path / "artifacts"
@@ -45,7 +46,10 @@ def test_step_failure_records_stderr_tail_and_uses_human_readable_run_id(
         encoding="utf-8",
     )
 
-    with pytest.raises(StepExecutionError, match=r"Step failed: boom \(rc=2\)") as exc_info:
+    with (
+        caplog.at_level(logging.ERROR, logger="exp_harness.run.execution"),
+        pytest.raises(StepExecutionError, match=r"Step failed: boom \(rc=2\)") as exc_info,
+    ):
         run_experiment(
             spec_path=spec_fp,
             roots=roots,
@@ -58,9 +62,8 @@ def test_step_failure_records_stderr_tail_and_uses_human_readable_run_id(
     assert exc_info.value.step_id == "boom"
     assert exc_info.value.rc == 2
 
-    err = capsys.readouterr().err
-    assert "[exp-harness] stderr tail (last 5 lines)" in err
-    assert "line199" in err
+    assert "stderr tail (last 5 lines)" in caplog.text
+    assert "line199" in caplog.text
 
     run_dirs = sorted((roots.runs_root / "fail").glob("*/run.json"))
     assert len(run_dirs) == 1

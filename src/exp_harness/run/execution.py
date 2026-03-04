@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import sys
+import logging
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
@@ -9,6 +9,8 @@ from exp_harness.errors import StepExecutionError
 from exp_harness.executors.base import RunContext, StepResult
 from exp_harness.store import RunPaths
 from exp_harness.utils import ensure_dir, tail_text_lines
+
+logger = logging.getLogger(__name__)
 
 
 class RunnerExecutor(Protocol):
@@ -123,18 +125,16 @@ def run_ordered_steps(
             stderr_fp = step_dir / "stderr.log"
             stdout_fp = step_dir / "stdout.log"
             tail = tail_text_lines(stderr_fp, n=int(stderr_tail_lines))
+            logger.error("step failed: %s (rc=%s)", step_id, result.rc)
+            logger.error("command: %s", step_dir / "command.txt")
+            logger.error("stderr: %s", stderr_fp)
+            logger.error("stdout: %s", stdout_fp)
             if tail:
-                print("", file=sys.stderr)
-                print(f"[exp-harness] step failed: {step_id} (rc={result.rc})", file=sys.stderr)
-                print(f"[exp-harness] command: {step_dir / 'command.txt'}", file=sys.stderr)
-                print(f"[exp-harness] stderr:  {stderr_fp}", file=sys.stderr)
-                print(f"[exp-harness] stdout:  {stdout_fp}", file=sys.stderr)
-                print(
-                    f"[exp-harness] stderr tail (last {stderr_tail_lines} lines):",
-                    file=sys.stderr,
+                logger.error(
+                    "stderr tail (last %s lines):\n%s",
+                    stderr_tail_lines,
+                    tail.rstrip("\n"),
                 )
-                print(tail.rstrip("\n"), file=sys.stderr)
-                print("", file=sys.stderr)
             run_json.setdefault("error", {})
             run_json["error"] = {
                 "message": f"Step failed: {step_id} (rc={result.rc})",
