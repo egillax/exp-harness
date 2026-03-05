@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM python:3.12.12-slim-bookworm
+FROM python:3.12.12-slim-trixie
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -10,7 +10,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN --mount=type=cache,target=/var/cache/apt \
     apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates \
-      docker.io \
+      docker-cli \
       git \
     && rm -rf /var/lib/apt/lists/*
 

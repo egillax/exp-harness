@@ -61,7 +61,7 @@ docker run --rm \
   -v "${ROOT}:/src" \
   -v "${WHEELS_DIR}:/wheels" \
   -w /src \
-  python:3.12-slim-bookworm \
+  python:3.12.12-slim-trixie \
   bash -lc "python -m pip install -U pip build >/dev/null && python -m build --wheel --outdir /wheels"
 
 echo "[runner-build] built wheel(s):" >&2
