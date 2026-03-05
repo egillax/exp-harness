@@ -85,6 +85,7 @@ run-experiment logs <name> <run_key> [--step train] [-f] [--runs-root ...]
 run-experiment inspect <name> <run_key> [--runs-root ...]
 run-experiment locks gc [--grace-seconds 600] [--force] [--runs-root ...]
 run-experiment sweep "name=myexp" "++params.lr=1e-3,1e-4" "resources=default,gpu1"
+  [--retry-failed 2]
 ```
 
 `run-experiment sweep` uses Hydra override syntax and composition, then executes members through
@@ -137,6 +138,8 @@ Sweep semantics:
 - exp-harness expands and executes sweep members sequentially.
 - This keeps canonical harness run/provenance directories.
 - Hydra launcher/sweeper plugin execution (native Hydra multirun infrastructure) is not invoked.
+- `--retry-failed N` retries only failed members up to `N` additional attempts.
+- Sweep always emits a machine-readable JSON summary (path printed at CLI end).
 
 ## Overrides
 
@@ -171,6 +174,8 @@ Sweep semantics:
 - `vars`: freeform YAML variables (optional)
 - `params`: freeform YAML (optional)
 - `steps[]`: `{id, needs?, cmd, outputs.artifacts_dir?, timeout_seconds?}`
+  - `steps[].resume_policy` (optional): `rerun|skip_if_succeeded|skip_if_marker`
+  - `steps[].success_markers` (optional): list of marker paths checked when `resume_policy: skip_if_marker`
 
 Minimal Docker example:
 

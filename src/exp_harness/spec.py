@@ -59,6 +59,8 @@ class StepSpec(_Model):
     cmd: list[str]
     outputs: StepOutputsSpec = Field(default_factory=StepOutputsSpec)
     timeout_seconds: int | None = None
+    resume_policy: Literal["rerun", "skip_if_succeeded", "skip_if_marker"] = "skip_if_succeeded"
+    success_markers: list[str] = Field(default_factory=list)
 
 
 class ExperimentSpec(_Model):

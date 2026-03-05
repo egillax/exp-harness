@@ -276,6 +276,14 @@ def sweep(
             help="On step failure, print the last N lines of stderr.log (0 disables).",
         ),
     ] = 120,
+    retry_failed: Annotated[
+        int,
+        typer.Option(
+            "--retry-failed",
+            min=0,
+            help="Retry failed sweep members up to N additional attempts.",
+        ),
+    ] = 0,
 ) -> None:
     """
     Run a Hydra-composed sweep via harness-managed sequential execution.
@@ -295,6 +303,7 @@ def sweep(
         follow_steps=follow_steps,
         stderr_tail_lines=stderr_tail_lines,
         continue_on_error=True,
+        retry_failed=retry_failed,
     )
 
     for item in result["runs"]:
@@ -311,6 +320,7 @@ def sweep(
     typer.echo(
         f"sweep total={result['total']} succeeded={result['succeeded']} failed={result['failed']}"
     )
+    typer.echo(f"sweep summary: {result['summary_path']}")
     if result["failed"] > 0:
         raise typer.Exit(code=1)
 

@@ -170,3 +170,147 @@ def test_resume_refuses_spec_drift_without_override(tmp_path: Path) -> None:
             run_key=run_key,
             enforce_clean=False,
         )
+
+
+def test_resume_policy_rerun_forces_successful_step_rerun(tmp_path: Path) -> None:
+    roots = Roots(
+        project_root=tmp_path, runs_root=tmp_path / "runs", artifacts_root=tmp_path / "artifacts"
+    )
+    spec_fp = tmp_path / "spec.yaml"
+    _write_spec(
+        spec_fp,
+        {
+            "name": "resume_policy_rerun",
+            "env": {"kind": "local"},
+            "steps": [
+                {
+                    "id": "a",
+                    "resume_policy": "rerun",
+                    "cmd": [
+                        sys.executable,
+                        "-c",
+                        (
+                            "from pathlib import Path; import os; "
+                            "p=Path(os.environ['EXP_HARNESS_RUN_DIR'])/'a.count'; "
+                            "n=(int(p.read_text()) if p.exists() else 0)+1; "
+                            "p.write_text(str(n))"
+                        ),
+                    ],
+                },
+                {
+                    "id": "b",
+                    "cmd": [
+                        sys.executable,
+                        "-c",
+                        (
+                            "from pathlib import Path; import os,sys; "
+                            "flag=Path(os.environ['EXP_HARNESS_RUN_DIR'])/'resume.flag'; "
+                            "sys.exit(0 if flag.exists() else 2)"
+                        ),
+                    ],
+                },
+            ],
+        },
+    )
+    with pytest.raises(StepExecutionError):
+        run_experiment(
+            spec_path=spec_fp,
+            roots=roots,
+            set_overrides=[],
+            set_string_overrides=[],
+            salt="s",
+            enforce_clean=False,
+            follow_steps=False,
+        )
+
+    run_json_fp = next((roots.runs_root / "resume_policy_rerun").glob("*/run.json"))
+    run_dir = run_json_fp.parent
+    run_json = json.loads(run_json_fp.read_text(encoding="utf-8"))
+    run_key = str(run_json["run_key"])
+    (run_dir / "resume.flag").write_text("ok", encoding="utf-8")
+
+    resume_experiment(
+        roots=roots,
+        name="resume_policy_rerun",
+        run_key=run_key,
+        enforce_clean=False,
+        follow_steps=False,
+    )
+
+    run_json_after = json.loads(run_json_fp.read_text(encoding="utf-8"))
+    assert run_json_after["steps"][0]["attempt"] >= 2
+    assert (run_dir / "a.count").read_text(encoding="utf-8").strip() == "2"
+
+
+def test_resume_policy_skip_if_marker_reruns_when_marker_missing(tmp_path: Path) -> None:
+    roots = Roots(
+        project_root=tmp_path, runs_root=tmp_path / "runs", artifacts_root=tmp_path / "artifacts"
+    )
+    spec_fp = tmp_path / "spec.yaml"
+    _write_spec(
+        spec_fp,
+        {
+            "name": "resume_policy_marker",
+            "env": {"kind": "local"},
+            "steps": [
+                {
+                    "id": "a",
+                    "resume_policy": "skip_if_marker",
+                    "success_markers": ["a.ok"],
+                    "cmd": [
+                        sys.executable,
+                        "-c",
+                        (
+                            "from pathlib import Path; import os; "
+                            "rd=Path(os.environ['EXP_HARNESS_RUN_DIR']); "
+                            "count=rd/'a.count'; n=(int(count.read_text()) if count.exists() else 0)+1; "
+                            "count.write_text(str(n)); (rd/'a.ok').write_text('ok')"
+                        ),
+                    ],
+                },
+                {
+                    "id": "b",
+                    "cmd": [
+                        sys.executable,
+                        "-c",
+                        (
+                            "from pathlib import Path; import os,sys; "
+                            "flag=Path(os.environ['EXP_HARNESS_RUN_DIR'])/'resume.flag'; "
+                            "sys.exit(0 if flag.exists() else 2)"
+                        ),
+                    ],
+                },
+            ],
+        },
+    )
+    with pytest.raises(StepExecutionError):
+        run_experiment(
+            spec_path=spec_fp,
+            roots=roots,
+            set_overrides=[],
+            set_string_overrides=[],
+            salt="s",
+            enforce_clean=False,
+            follow_steps=False,
+        )
+
+    run_json_fp = next((roots.runs_root / "resume_policy_marker").glob("*/run.json"))
+    run_dir = run_json_fp.parent
+    run_json = json.loads(run_json_fp.read_text(encoding="utf-8"))
+    run_key = str(run_json["run_key"])
+    (run_dir / "a.ok").unlink(missing_ok=True)
+    (run_dir / "resume.flag").write_text("ok", encoding="utf-8")
+
+    resume_experiment(
+        roots=roots,
+        name="resume_policy_marker",
+        run_key=run_key,
+        enforce_clean=False,
+        follow_steps=False,
+    )
+
+    run_json_after = json.loads(run_json_fp.read_text(encoding="utf-8"))
+    step_a = run_json_after["steps"][0]
+    assert step_a["attempt"] >= 2
+    assert (run_dir / "a.count").read_text(encoding="utf-8").strip() == "2"
+    assert "missing_markers" in (step_a.get("resume_checks") or {})

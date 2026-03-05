@@ -133,6 +133,47 @@ def _mark_remaining_steps_skipped(
     write_run_json_fn(paths, run_json)
 
 
+def _step_resume_policy(step: dict[str, Any]) -> str:
+    policy = step.get("resume_policy")
+    if policy in {"rerun", "skip_if_succeeded", "skip_if_marker"}:
+        return str(policy)
+    return "skip_if_succeeded"
+
+
+def _step_success_markers(step: dict[str, Any], *, run_dir: Path) -> list[Path]:
+    raw = step.get("success_markers")
+    if not isinstance(raw, list):
+        return []
+    out: list[Path] = []
+    for marker in raw:
+        if isinstance(marker, str) and marker:
+            p = Path(marker)
+            out.append(p if p.is_absolute() else run_dir / p)
+    return out
+
+
+def _resume_skip_decision(
+    *,
+    step: dict[str, Any],
+    step_record: dict[str, Any],
+    run_dir: Path,
+) -> tuple[bool, list[str]]:
+    if step_record.get("state") != "succeeded":
+        return False, []
+
+    policy = _step_resume_policy(step)
+    if policy == "rerun":
+        return False, []
+    if policy == "skip_if_succeeded":
+        return True, []
+
+    markers = _step_success_markers(step, run_dir=run_dir)
+    missing = [str(p) for p in markers if not p.exists()]
+    if not markers:
+        return True, []
+    return len(missing) == 0, missing
+
+
 def build_executor_and_context(
     *,
     kind: str,
@@ -218,8 +259,28 @@ def run_ordered_steps(
         if step_artifacts_dir == f"{run_ctx['artifacts']}/{step_id}":
             ensure_dir(paths.artifacts_dir / step_id)
 
-        if resume_mode and step_record.get("state") == "succeeded":
-            continue
+        if resume_mode:
+            should_skip, missing_markers = _resume_skip_decision(
+                step=step,
+                step_record=step_record,
+                run_dir=paths.run_dir,
+            )
+            policy = _step_resume_policy(step)
+            step_record["resume_policy"] = policy
+            step_record["resume_checks"] = {
+                "checked_at_utc": utc_now_iso(),
+                "missing_markers": missing_markers,
+            }
+            if should_skip:
+                step_record["last_resume_action"] = "skipped"
+                write_run_json_fn(paths, run_json)
+                continue
+            if policy == "skip_if_marker" and missing_markers:
+                logger.warning(
+                    "resume marker check failed for step %s; rerunning (missing=%s)",
+                    step_id,
+                    missing_markers,
+                )
 
         step_record["state"] = "running"
         step_record["started_at_utc"] = utc_now_iso()

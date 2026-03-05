@@ -18,6 +18,7 @@ def test_cli_sweep_success_exit_zero(monkeypatch, tmp_path: Path) -> None:
             "total": 2,
             "succeeded": 2,
             "failed": 0,
+            "summary_path": str(runs_root / "_sweeps" / "summary.json"),
             "runs": [
                 {
                     "index": 1,
@@ -31,6 +32,15 @@ def test_cli_sweep_success_exit_zero(monkeypatch, tmp_path: Path) -> None:
                         "artifacts_dir": str(artifacts_root / "run-1"),
                     },
                     "error": None,
+                    "attempts": [
+                        {
+                            "attempt": 1,
+                            "status": "succeeded",
+                            "error": None,
+                            "run_id": "run-1",
+                            "run_key": "key-1",
+                        }
+                    ],
                 },
                 {
                     "index": 2,
@@ -44,6 +54,15 @@ def test_cli_sweep_success_exit_zero(monkeypatch, tmp_path: Path) -> None:
                         "artifacts_dir": str(artifacts_root / "run-2"),
                     },
                     "error": None,
+                    "attempts": [
+                        {
+                            "attempt": 1,
+                            "status": "succeeded",
+                            "error": None,
+                            "run_id": "run-2",
+                            "run_key": "key-2",
+                        }
+                    ],
                 },
             ],
         }
@@ -63,6 +82,7 @@ def test_cli_sweep_success_exit_zero(monkeypatch, tmp_path: Path) -> None:
     assert res.exit_code == 0, res.stdout + res.stderr
     assert "sweep total=2 succeeded=2 failed=0" in res.stdout
     assert "[1/2] ok sweep key-1" in res.stdout
+    assert "sweep summary:" in res.stdout
 
 
 def test_cli_sweep_failure_exit_nonzero(monkeypatch, tmp_path: Path) -> None:
@@ -74,6 +94,7 @@ def test_cli_sweep_failure_exit_nonzero(monkeypatch, tmp_path: Path) -> None:
             "total": 2,
             "succeeded": 1,
             "failed": 1,
+            "summary_path": "/tmp/sweeps/summary.json",
             "runs": [
                 {
                     "index": 1,
@@ -87,6 +108,15 @@ def test_cli_sweep_failure_exit_nonzero(monkeypatch, tmp_path: Path) -> None:
                         "artifacts_dir": "/tmp/artifacts/run-1",
                     },
                     "error": None,
+                    "attempts": [
+                        {
+                            "attempt": 1,
+                            "status": "succeeded",
+                            "error": None,
+                            "run_id": "run-1",
+                            "run_key": "key-1",
+                        }
+                    ],
                 },
                 {
                     "index": 2,
@@ -94,6 +124,15 @@ def test_cli_sweep_failure_exit_nonzero(monkeypatch, tmp_path: Path) -> None:
                     "status": "failed",
                     "result": None,
                     "error": "boom",
+                    "attempts": [
+                        {
+                            "attempt": 1,
+                            "status": "failed",
+                            "error": "boom",
+                            "run_id": None,
+                            "run_key": None,
+                        }
+                    ],
                 },
             ],
         }

@@ -80,6 +80,7 @@ def test_run_hydra_sweep_collects_partial_failures(tmp_path: Path, monkeypatch) 
     failed = [item for item in result["runs"] if item["status"] == "failed"]
     assert len(failed) == 1
     assert failed[0]["error"] == "docker boom"
+    assert Path(result["summary_path"]).exists()
 
 
 def test_run_experiment_composes_config_and_invokes_runner(tmp_path: Path, monkeypatch) -> None:
@@ -189,3 +190,49 @@ def test_resume_experiment_delegates_to_runner(tmp_path: Path, monkeypatch) -> N
     assert captured["allow_spec_drift"] is True
     assert captured["force"] is True
     assert captured["follow_steps"] is False
+
+
+def test_run_hydra_sweep_retries_failed_members_and_records_attempts(
+    tmp_path: Path, monkeypatch
+) -> None:
+    attempts: dict[str, int] = {}
+
+    def _fake_run_composed_experiment(**kwargs):
+        cfg = kwargs["cfg"]
+        assert isinstance(cfg, dict)
+        lr = str((cfg.get("params") or {}).get("lr"))
+        n = attempts.get(lr, 0) + 1
+        attempts[lr] = n
+        if lr == "0.001" and n == 1:
+            raise RuntimeError("transient boom")
+        return {
+            "name": str(cfg.get("name")),
+            "run_id": f"run-{lr}-{n}",
+            "run_key": f"key-{lr}-{n}",
+            "run_dir": str(tmp_path / "runs" / f"run-{lr}-{n}"),
+            "artifacts_dir": str(tmp_path / "artifacts" / f"run-{lr}-{n}"),
+        }
+
+    monkeypatch.setattr(
+        "exp_harness.run.api._run_composed_experiment", _fake_run_composed_experiment
+    )
+    result = run_hydra_sweep(
+        overrides=["name=sweep_retry", "++params.lr=1e-3,1e-4"],
+        project_root=tmp_path,
+        retry_failed=1,
+    )
+
+    assert result["total"] == 2
+    assert result["failed"] == 0
+    retried_member = next(
+        item
+        for item in result["runs"]
+        if any("params.lr=0.001" in over for over in item["overrides"])
+    )
+    assert len(retried_member["attempts"]) == 2
+    assert retried_member["attempts"][0]["status"] == "failed"
+    assert retried_member["attempts"][1]["status"] == "succeeded"
+
+    summary = json.loads(Path(result["summary_path"]).read_text(encoding="utf-8"))
+    assert summary["total"] == 2
+    assert summary["failed"] == 0
