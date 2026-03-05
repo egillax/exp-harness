@@ -9,7 +9,9 @@ from exp_harness.run.api import (
     expand_hydra_sweep_overrides,
     run_experiment,
     run_hydra_sweep,
+    run_spec_experiment,
 )
+from tests.helpers import write_spec
 
 
 def test_compose_experiment_config_defaults_are_valid() -> None:
@@ -132,3 +134,27 @@ def test_run_experiment_api_runs_hydra_config(tmp_path: Path) -> None:
     resolved = json.loads((run_dir / "resolved_spec.json").read_text(encoding="utf-8"))
     assert resolved["params"]["x"] == 7
     assert resolved["params"]["tag"] == "001"
+
+
+def test_run_spec_experiment_runs_yaml_spec(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    runs_root = tmp_path / "runs"
+    artifacts_root = tmp_path / "artifacts"
+    spec_fp = write_spec(
+        project_root,
+        {
+            "name": "spec_api",
+            "env": {"kind": "local"},
+            "steps": [{"id": "main", "cmd": ["python", "-c", "print('hi')"]}],
+        },
+    )
+
+    result = run_spec_experiment(
+        spec_path=spec_fp,
+        runs_root=runs_root,
+        artifacts_root=artifacts_root,
+        follow_steps=False,
+    )
+    assert result["name"] == "spec_api"
+    assert Path(result["run_dir"]).exists()

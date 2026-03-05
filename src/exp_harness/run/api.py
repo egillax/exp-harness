@@ -14,7 +14,7 @@ from omegaconf import OmegaConf
 
 from exp_harness.config import resolve_roots
 from exp_harness.spec import ExperimentSpec
-from exp_harness.utils import discover_project_root_from_dir
+from exp_harness.utils import discover_project_root, discover_project_root_from_dir
 
 
 class ComposeConfigError(ValueError):
@@ -200,6 +200,35 @@ def run_experiment(
         follow_steps=follow_steps,
         stderr_tail_lines=stderr_tail_lines,
         suffix="hydra_run",
+    )
+
+
+def run_spec_experiment(
+    *,
+    spec_path: Path,
+    project_root: Path | None = None,
+    runs_root: Path | None = None,
+    artifacts_root: Path | None = None,
+    salt: str | None = None,
+    run_label: str | None = None,
+    enforce_clean: bool = False,
+    follow_steps: bool = True,
+    stderr_tail_lines: int = 120,
+) -> RunResult:
+    """
+    Run a YAML spec file directly (compatibility path for spec-based wrappers).
+    """
+    root = project_root or discover_project_root(spec_path)
+    return _run_spec_file(
+        spec_path=spec_path,
+        project_root=root,
+        runs_root=runs_root,
+        artifacts_root=artifacts_root,
+        salt=salt,
+        run_label=run_label,
+        enforce_clean=enforce_clean,
+        follow_steps=follow_steps,
+        stderr_tail_lines=stderr_tail_lines,
     )
 
 

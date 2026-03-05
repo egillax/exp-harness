@@ -44,6 +44,7 @@ uv run pytest --cov=exp_harness --cov-report=term-missing
 
 ```bash
 run-experiment run "name=toy_hydra"
+run-experiment run-spec examples/toy.yaml
 run-experiment status
 ```
 
@@ -69,6 +70,11 @@ run-experiment run "name=myexp" "env=local" "++params.lr=1e-4" \
   [--no-follow-steps] [--stderr-tail-lines 120] \
   [--runs-root /path/to/runs] [--artifacts-root /path/to/artifacts]
 
+run-experiment run-spec /path/to/spec.yaml \
+  [--salt myrun] [--run-label compat_run] [--enforce-clean] \
+  [--no-follow-steps] [--stderr-tail-lines 120] \
+  [--runs-root /path/to/runs] [--artifacts-root /path/to/artifacts]
+
 run-experiment status [--name toy] [--limit 20] [--runs-root ...]
 run-experiment logs <name> <run_key> [--step train] [-f] [--runs-root ...]
 run-experiment inspect <name> <run_key> [--runs-root ...]
@@ -78,6 +84,7 @@ run-experiment sweep "name=myexp" "++params.lr=1e-3,1e-4" "resources=default,gpu
 
 `run-experiment sweep` uses Hydra override syntax and composition, then executes members through
 the harness runner sequentially so runs/provenance stay in the canonical harness layout.
+`run-experiment run-spec` is a compatibility/ops path for existing spec-file pipelines.
 
 `run-experiment run` streams step logs by default. Use `--no-follow-steps` to disable live streaming.
 Standard local experiments and sweeps do not require any bash wrapper scripts.
@@ -129,6 +136,12 @@ Sweep semantics:
 ## Overrides
 
 - `run` / `sweep` use Hydra override syntax (`group=value`, `+key=value`, `++key=value`, comma sweeps).
+
+## Spec Compatibility Mode
+
+- `run-spec` executes a YAML spec file directly.
+- This is intended for existing wrappers/pipelines that already generate/run `*.spec.yaml`.
+- New workflows should use Hydra-native `run` and `sweep`.
 
 ## Spec schema (minimal reference)
 

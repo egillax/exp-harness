@@ -9,6 +9,7 @@ from .api import (
     expand_hydra_sweep_overrides,
     run_experiment,
     run_hydra_sweep,
+    run_spec_experiment,
 )
 
 __all__ = [
@@ -19,5 +20,6 @@ __all__ = [
     "compose_experiment_config",
     "expand_hydra_sweep_overrides",
     "run_experiment",
+    "run_spec_experiment",
     "run_hydra_sweep",
 ]

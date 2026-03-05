@@ -7,6 +7,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from exp_harness.cli import app
+from tests.helpers import write_spec
 
 
 def test_cli_run_status_logs_inspect_and_locks_gc(tmp_path: Path) -> None:
@@ -200,3 +201,36 @@ def test_cli_run_invokes_hydra_api_with_overrides(tmp_path: Path, monkeypatch) -
     assert "hydra_cli abc123" in res.stdout
     assert captured["overrides"] == ["name=hydra_cli", "resources=default"]
     assert captured["follow_steps"] is False
+
+
+def test_cli_run_spec_executes_spec_file(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    runs_root = tmp_path / "runs"
+    artifacts_root = tmp_path / "artifacts"
+
+    spec_fp = write_spec(
+        project_root,
+        {
+            "name": "spec_cli",
+            "env": {"kind": "local"},
+            "steps": [{"id": "main", "cmd": ["python", "-c", "print('hi')"]}],
+        },
+    )
+
+    runner = CliRunner()
+    res = runner.invoke(
+        app,
+        [
+            "run-spec",
+            str(spec_fp),
+            "--runs-root",
+            str(runs_root),
+            "--artifacts-root",
+            str(artifacts_root),
+            "--no-follow-steps",
+        ],
+    )
+
+    assert res.exit_code == 0, res.stdout + res.stderr
+    assert "spec_cli " in res.stdout

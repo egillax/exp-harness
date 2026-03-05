@@ -90,6 +90,73 @@ def run(
     typer.echo(f"artifacts_dir: {res['artifacts_dir']}")
 
 
+@app.command("run-spec")
+def run_spec(
+    spec: Annotated[Path, typer.Argument(exists=True, dir_okay=False, readable=True)],
+    runs_root: Annotated[
+        Path | None,
+        typer.Option(
+            "--runs-root",
+            help=f"Override runs root (env: {ENV_RUNS_ROOT})",
+        ),
+    ] = None,
+    artifacts_root: Annotated[
+        Path | None,
+        typer.Option(
+            "--artifacts-root",
+            help=f"Override artifacts root (env: {ENV_ARTIFACTS_ROOT})",
+        ),
+    ] = None,
+    salt: Annotated[
+        str | None, typer.Option("--salt", help="Run-key salt (forces new run identity)")
+    ] = None,
+    run_label: Annotated[
+        str | None,
+        typer.Option(
+            "--run-label",
+            help="Optional human label used in run directory naming (timestamp__label__hash).",
+        ),
+    ] = None,
+    enforce_clean: Annotated[
+        bool, typer.Option("--enforce-clean", help="Fail if git working tree is dirty")
+    ] = False,
+    follow_steps: Annotated[
+        bool,
+        typer.Option(
+            "--follow-steps/--no-follow-steps",
+            "--follow/--no-follow",
+            help="Stream step stdout/stderr to the terminal while running (still writes stdout.log/stderr.log).",
+        ),
+    ] = True,
+    stderr_tail_lines: Annotated[
+        int,
+        typer.Option(
+            "--stderr-tail-lines",
+            help="On step failure, print the last N lines of stderr.log (0 disables).",
+        ),
+    ] = 120,
+) -> None:
+    """
+    Run a YAML spec file directly (compatibility path for existing wrappers).
+    """
+    from exp_harness.run.api import run_spec_experiment
+
+    res = run_spec_experiment(
+        spec_path=spec,
+        runs_root=runs_root,
+        artifacts_root=artifacts_root,
+        salt=salt,
+        run_label=run_label,
+        enforce_clean=enforce_clean,
+        follow_steps=follow_steps,
+        stderr_tail_lines=stderr_tail_lines,
+    )
+    typer.echo(f"{res['name']} {res['run_key']}")
+    typer.echo(f"run_id: {res['run_id']}")
+    typer.echo(f"run_dir: {res['run_dir']}")
+    typer.echo(f"artifacts_dir: {res['artifacts_dir']}")
+
+
 @app.command()
 def sweep(
     overrides: Annotated[
