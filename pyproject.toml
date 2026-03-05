@@ -21,9 +21,9 @@ dev = [
 ]
 
 [project.scripts]
-run-experiment = "exp_harness.cli:app"
-run_experiment = "exp_harness.cli:app"
-run-expt = "exp_harness.cli:app"
+run-experiment = "exp_harness.cli:main"
+run_experiment = "exp_harness.cli:main"
+run-expt = "exp_harness.cli:main"
 
 [build-system]
 requires = ["hatchling>=1.24"]

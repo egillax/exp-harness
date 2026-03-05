@@ -284,6 +284,13 @@ def sweep(
             help="Retry failed sweep members up to N additional attempts.",
         ),
     ] = 0,
+    continue_on_error: Annotated[
+        bool,
+        typer.Option(
+            "--continue-on-error/--fail-fast",
+            help="Continue sweep after member failures, or stop immediately on first failure.",
+        ),
+    ] = True,
 ) -> None:
     """
     Run a Hydra-composed sweep via harness-managed sequential execution.
@@ -302,7 +309,7 @@ def sweep(
         enforce_clean=enforce_clean,
         follow_steps=follow_steps,
         stderr_tail_lines=stderr_tail_lines,
-        continue_on_error=True,
+        continue_on_error=continue_on_error,
         retry_failed=retry_failed,
     )
 

@@ -13,7 +13,10 @@ def test_cli_sweep_success_exit_zero(monkeypatch, tmp_path: Path) -> None:
     runs_root = tmp_path / "runs"
     artifacts_root = tmp_path / "artifacts"
 
+    captured: dict[str, object] = {}
+
     def _fake_run_hydra_sweep(**kwargs):
+        captured.update(kwargs)
         return {
             "total": 2,
             "succeeded": 2,
@@ -83,13 +86,17 @@ def test_cli_sweep_success_exit_zero(monkeypatch, tmp_path: Path) -> None:
     assert "sweep total=2 succeeded=2 failed=0" in res.stdout
     assert "[1/2] ok sweep key-1" in res.stdout
     assert "sweep summary:" in res.stdout
+    assert captured["continue_on_error"] is True
 
 
 def test_cli_sweep_failure_exit_nonzero(monkeypatch, tmp_path: Path) -> None:
     project_root = tmp_path / "project"
     project_root.mkdir()
 
+    captured: dict[str, object] = {}
+
     def _fake_run_hydra_sweep(**kwargs):
+        captured.update(kwargs)
         return {
             "total": 2,
             "succeeded": 1,
@@ -153,3 +160,58 @@ def test_cli_sweep_failure_exit_nonzero(monkeypatch, tmp_path: Path) -> None:
     out = res.stdout + res.stderr
     assert "[2/2] failed (name=sweep params.x=2): boom" in out
     assert "sweep total=2 succeeded=1 failed=1" in out
+    assert captured["continue_on_error"] is True
+
+
+def test_cli_sweep_fail_fast_option_is_passed(monkeypatch, tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    captured: dict[str, object] = {}
+
+    def _fake_run_hydra_sweep(**kwargs):
+        captured.update(kwargs)
+        return {
+            "total": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "summary_path": "/tmp/sweeps/summary.json",
+            "runs": [
+                {
+                    "index": 1,
+                    "overrides": ["name=sweep", "params.x=1"],
+                    "status": "succeeded",
+                    "result": {
+                        "name": "sweep",
+                        "run_id": "run-1",
+                        "run_key": "key-1",
+                        "run_dir": "/tmp/runs/run-1",
+                        "artifacts_dir": "/tmp/artifacts/run-1",
+                    },
+                    "error": None,
+                    "attempts": [
+                        {
+                            "attempt": 1,
+                            "status": "succeeded",
+                            "error": None,
+                            "run_id": "run-1",
+                            "run_key": "key-1",
+                        }
+                    ],
+                }
+            ],
+        }
+
+    monkeypatch.setattr("exp_harness.run.api.run_hydra_sweep", _fake_run_hydra_sweep)
+
+    import os
+
+    old_cwd = os.getcwd()
+    try:
+        os.chdir(project_root)
+        runner = CliRunner()
+        res = runner.invoke(app, ["sweep", "name=sweep", "params.x=1", "--fail-fast"])
+    finally:
+        os.chdir(old_cwd)
+
+    assert res.exit_code == 0
+    assert captured["continue_on_error"] is False

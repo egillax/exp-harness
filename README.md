@@ -85,7 +85,7 @@ run-experiment logs <name> <run_key> [--step train] [-f] [--runs-root ...]
 run-experiment inspect <name> <run_key> [--runs-root ...]
 run-experiment locks gc [--grace-seconds 600] [--force] [--runs-root ...]
 run-experiment sweep "name=myexp" "++params.lr=1e-3,1e-4" "resources=default,gpu1"
-  [--retry-failed 2]
+  [--retry-failed 2] [--continue-on-error|--fail-fast]
 ```
 
 `run-experiment sweep` uses Hydra override syntax and composition, then executes members through
@@ -139,6 +139,7 @@ Sweep semantics:
 - This keeps canonical harness run/provenance directories.
 - Hydra launcher/sweeper plugin execution (native Hydra multirun infrastructure) is not invoked.
 - `--retry-failed N` retries only failed members up to `N` additional attempts.
+- `--fail-fast` stops sweep execution on first failed member (default is continue-on-error).
 - Sweep always emits a machine-readable JSON summary (path printed at CLI end).
 
 ## Overrides
