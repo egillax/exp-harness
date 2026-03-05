@@ -75,6 +75,11 @@ run-experiment run-spec /path/to/spec.yaml \
   [--no-follow-steps] [--stderr-tail-lines 120] \
   [--runs-root /path/to/runs] [--artifacts-root /path/to/artifacts]
 
+run-experiment resume <name> <run_key> \
+  [--allow-spec-drift] [--force] [--enforce-clean] \
+  [--no-follow-steps] [--stderr-tail-lines 120] \
+  [--runs-root /path/to/runs] [--artifacts-root /path/to/artifacts]
+
 run-experiment status [--name toy] [--limit 20] [--runs-root ...]
 run-experiment logs <name> <run_key> [--step train] [-f] [--runs-root ...]
 run-experiment inspect <name> <run_key> [--runs-root ...]
@@ -143,6 +148,11 @@ Sweep semantics:
 - This is intended for existing wrappers/pipelines that already generate/run `*.spec.yaml`.
 - New workflows should use Hydra-native `run` and `sweep`.
 
+## Resume
+
+- `resume <name> <run_key>` continues a run from the first step not marked `succeeded`.
+- The command records resume attempts in `run.json` (`attempt`, `resumed_at_utc`, `resumed_from_step`).
+- By default, resume refuses spec drift and already-succeeded runs unless `--allow-spec-drift` / `--force`.
 ## Spec schema (minimal reference)
 
 - `name` (required): experiment name

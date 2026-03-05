@@ -198,6 +198,7 @@ def run_ordered_steps(
     run_ctx: dict[str, str],
     stderr_tail_lines: int,
     write_run_json_fn: Callable[[RunPaths, dict[str, Any]], None],
+    resume_mode: bool = False,
 ) -> None:
     step_records = ensure_step_records(
         ordered_steps=ordered_steps,
@@ -216,6 +217,9 @@ def run_ordered_steps(
         step_artifacts_dir = ((step.get("outputs") or {}) or {}).get("artifacts_dir")
         if step_artifacts_dir == f"{run_ctx['artifacts']}/{step_id}":
             ensure_dir(paths.artifacts_dir / step_id)
+
+        if resume_mode and step_record.get("state") == "succeeded":
+            continue
 
         step_record["state"] = "running"
         step_record["started_at_utc"] = utc_now_iso()

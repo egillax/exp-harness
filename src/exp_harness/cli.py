@@ -158,6 +158,79 @@ def run_spec(
 
 
 @app.command()
+def resume(
+    name: Annotated[str, typer.Argument(help="Experiment name")],
+    run_key: Annotated[str, typer.Argument(help="Run key to resume")],
+    runs_root: Annotated[
+        Path | None,
+        typer.Option(
+            "--runs-root",
+            help=f"Override runs root (env: {ENV_RUNS_ROOT})",
+        ),
+    ] = None,
+    artifacts_root: Annotated[
+        Path | None,
+        typer.Option(
+            "--artifacts-root",
+            help=f"Override artifacts root (env: {ENV_ARTIFACTS_ROOT})",
+        ),
+    ] = None,
+    enforce_clean: Annotated[
+        bool, typer.Option("--enforce-clean", help="Fail if git working tree is dirty")
+    ] = False,
+    allow_spec_drift: Annotated[
+        bool,
+        typer.Option(
+            "--allow-spec-drift",
+            help="Allow resuming even if current stored spec fingerprints do not match.",
+        ),
+    ] = False,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            help="Allow resume command even when run is already marked succeeded.",
+        ),
+    ] = False,
+    follow_steps: Annotated[
+        bool,
+        typer.Option(
+            "--follow-steps/--no-follow-steps",
+            "--follow/--no-follow",
+            help="Stream step stdout/stderr to the terminal while resuming.",
+        ),
+    ] = True,
+    stderr_tail_lines: Annotated[
+        int,
+        typer.Option(
+            "--stderr-tail-lines",
+            help="On step failure, print the last N lines of stderr.log (0 disables).",
+        ),
+    ] = 120,
+) -> None:
+    """
+    Resume an unfinished run from the first incomplete step.
+    """
+    from exp_harness.run.api import resume_experiment
+
+    res = resume_experiment(
+        name=name,
+        run_key=run_key,
+        runs_root=runs_root,
+        artifacts_root=artifacts_root,
+        enforce_clean=enforce_clean,
+        allow_spec_drift=allow_spec_drift,
+        force=force,
+        follow_steps=follow_steps,
+        stderr_tail_lines=stderr_tail_lines,
+    )
+    typer.echo(f"{res['name']} {res['run_key']}")
+    typer.echo(f"run_id: {res['run_id']}")
+    typer.echo(f"run_dir: {res['run_dir']}")
+    typer.echo(f"artifacts_dir: {res['artifacts_dir']}")
+
+
+@app.command()
 def sweep(
     overrides: Annotated[
         list[str] | None,

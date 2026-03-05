@@ -7,6 +7,7 @@ from pathlib import Path
 from exp_harness.run.api import (
     compose_experiment_config,
     expand_hydra_sweep_overrides,
+    resume_experiment,
     run_experiment,
     run_hydra_sweep,
     run_spec_experiment,
@@ -158,3 +159,33 @@ def test_run_spec_experiment_runs_yaml_spec(tmp_path: Path) -> None:
     )
     assert result["name"] == "spec_api"
     assert Path(result["run_dir"]).exists()
+
+
+def test_resume_experiment_delegates_to_runner(tmp_path: Path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_resume_experiment(**kwargs):
+        captured.update(kwargs)
+        return {
+            "name": str(kwargs["name"]),
+            "run_id": "20260305-120000Z__resume__abc12300",
+            "run_key": str(kwargs["run_key"]),
+            "run_dir": str(tmp_path / "runs" / "resume"),
+            "artifacts_dir": str(tmp_path / "artifacts" / "resume"),
+        }
+
+    monkeypatch.setattr("exp_harness.runner.resume_experiment", _fake_resume_experiment)
+    result = resume_experiment(
+        name="resume_api",
+        run_key="abc123",
+        project_root=tmp_path,
+        allow_spec_drift=True,
+        force=True,
+        follow_steps=False,
+    )
+
+    assert result["name"] == "resume_api"
+    assert result["run_key"] == "abc123"
+    assert captured["allow_spec_drift"] is True
+    assert captured["force"] is True
+    assert captured["follow_steps"] is False

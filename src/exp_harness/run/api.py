@@ -232,6 +232,45 @@ def run_spec_experiment(
     )
 
 
+def resume_experiment(
+    *,
+    name: str,
+    run_key: str,
+    project_root: Path | None = None,
+    runs_root: Path | None = None,
+    artifacts_root: Path | None = None,
+    enforce_clean: bool = False,
+    allow_spec_drift: bool = False,
+    force: bool = False,
+    follow_steps: bool = False,
+    stderr_tail_lines: int = 120,
+) -> RunResult:
+    """
+    Resume an existing run from the first step not yet marked succeeded.
+    """
+    from exp_harness.runner import resume_experiment as _resume_experiment
+
+    root = project_root or discover_project_root_from_dir(Path.cwd())
+    roots = resolve_roots(
+        project_root=root,
+        runs_root=runs_root,
+        artifacts_root=artifacts_root,
+    )
+    return cast(
+        RunResult,
+        _resume_experiment(
+            roots=roots,
+            name=name,
+            run_key=run_key,
+            enforce_clean=enforce_clean,
+            allow_spec_drift=allow_spec_drift,
+            force=force,
+            follow_steps=follow_steps,
+            stderr_tail_lines=stderr_tail_lines,
+        ),
+    )
+
+
 def run_hydra_sweep(
     *,
     overrides: Sequence[str] | None = None,

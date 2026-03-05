@@ -36,3 +36,7 @@ class StepExecutionError(ExpHarnessError):
         self.step_id = step_id
         self.rc = int(rc)
         super().__init__(f"Step failed: {step_id} (rc={rc})")
+
+
+class RunResumeError(ExpHarnessError):
+    """Raised when a run cannot be resumed safely under current constraints."""

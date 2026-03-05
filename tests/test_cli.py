@@ -234,3 +234,44 @@ def test_cli_run_spec_executes_spec_file(tmp_path: Path) -> None:
 
     assert res.exit_code == 0, res.stdout + res.stderr
     assert "spec_cli " in res.stdout
+
+
+def test_cli_resume_invokes_resume_api(tmp_path: Path, monkeypatch) -> None:
+    runs_root = tmp_path / "runs"
+    artifacts_root = tmp_path / "artifacts"
+    captured: dict[str, object] = {}
+
+    def _fake_resume_experiment(**kwargs):
+        captured.update(kwargs)
+        return {
+            "name": "resume_cli",
+            "run_id": "20260305-120000Z__resume__abc12300",
+            "run_key": "abc123",
+            "run_dir": str(runs_root / "resume_cli" / "abc123"),
+            "artifacts_dir": str(artifacts_root / "resume_cli" / "abc123"),
+        }
+
+    monkeypatch.setattr("exp_harness.run.api.resume_experiment", _fake_resume_experiment)
+    runner = CliRunner()
+    res = runner.invoke(
+        app,
+        [
+            "resume",
+            "resume_cli",
+            "abc123",
+            "--runs-root",
+            str(runs_root),
+            "--artifacts-root",
+            str(artifacts_root),
+            "--allow-spec-drift",
+            "--force",
+            "--no-follow-steps",
+        ],
+    )
+    assert res.exit_code == 0, res.stdout + res.stderr
+    assert "resume_cli abc123" in res.stdout
+    assert captured["name"] == "resume_cli"
+    assert captured["run_key"] == "abc123"
+    assert captured["allow_spec_drift"] is True
+    assert captured["force"] is True
+    assert captured["follow_steps"] is False

@@ -178,6 +178,7 @@ def phase_execute_run(
     stderr_tail_lines: int,
     docker_executor_factory: ExecutorFactory,
     local_executor_factory: ExecutorFactory,
+    resume_mode: bool = False,
 ) -> None:
     executor, ctx = build_executor_and_context(
         kind=kind,
@@ -204,6 +205,7 @@ def phase_execute_run(
         run_ctx=prepared.run_ctx,
         stderr_tail_lines=stderr_tail_lines,
         write_run_json_fn=write_run_json,
+        resume_mode=resume_mode,
     )
     executor.finalize_run(ctx)
 
