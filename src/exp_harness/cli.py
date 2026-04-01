@@ -178,12 +178,26 @@ def resume(
     enforce_clean: Annotated[
         bool, typer.Option("--enforce-clean", help="Fail if git working tree is dirty")
     ] = False,
-    allow_spec_drift: Annotated[
-        bool,
+    repair_spec: Annotated[
+        Path | None,
         typer.Option(
-            "--allow-spec-drift",
-            help="Allow resuming even if current stored spec fingerprints do not match.",
+            "--repair-spec",
+            exists=True,
+            dir_okay=False,
+            readable=True,
+            help="Replacement spec file to activate for repair resume.",
         ),
+    ] = None,
+    allow_config_drift: Annotated[
+        str | None,
+        typer.Option(
+            "--allow-config-drift",
+            help="Comma-separated incomplete step states allowed to drift: failed,pending,interrupted.",
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Validate and print resume decisions without executing."),
     ] = False,
     force: Annotated[
         bool,
@@ -219,7 +233,9 @@ def resume(
         runs_root=runs_root,
         artifacts_root=artifacts_root,
         enforce_clean=enforce_clean,
-        allow_spec_drift=allow_spec_drift,
+        repair_spec=repair_spec,
+        allow_config_drift=allow_config_drift,
+        dry_run=dry_run,
         force=force,
         follow_steps=follow_steps,
         stderr_tail_lines=stderr_tail_lines,

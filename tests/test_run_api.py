@@ -164,6 +164,8 @@ def test_run_spec_experiment_runs_yaml_spec(tmp_path: Path) -> None:
 
 def test_resume_experiment_delegates_to_runner(tmp_path: Path, monkeypatch) -> None:
     captured: dict[str, object] = {}
+    repair_spec = tmp_path / "repair.yaml"
+    repair_spec.write_text("name: resume_api\nsteps: []\n", encoding="utf-8")
 
     def _fake_resume_experiment(**kwargs):
         captured.update(kwargs)
@@ -180,14 +182,18 @@ def test_resume_experiment_delegates_to_runner(tmp_path: Path, monkeypatch) -> N
         name="resume_api",
         run_key="abc123",
         project_root=tmp_path,
-        allow_spec_drift=True,
+        repair_spec=repair_spec,
+        allow_config_drift="failed",
+        dry_run=True,
         force=True,
         follow_steps=False,
     )
 
     assert result["name"] == "resume_api"
     assert result["run_key"] == "abc123"
-    assert captured["allow_spec_drift"] is True
+    assert captured["repair_spec"] == repair_spec
+    assert captured["allow_config_drift"] == "failed"
+    assert captured["dry_run"] is True
     assert captured["force"] is True
     assert captured["follow_steps"] is False
 

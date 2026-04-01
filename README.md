@@ -76,7 +76,8 @@ run-experiment run-spec /path/to/spec.yaml \
   [--runs-root /path/to/runs] [--artifacts-root /path/to/artifacts]
 
 run-experiment resume <name> <run_key> \
-  [--allow-spec-drift] [--force] [--enforce-clean] \
+  [--repair-spec /path/to/repair.yaml --allow-config-drift failed,pending] \
+  [--dry-run] [--force] [--enforce-clean] \
   [--no-follow-steps] [--stderr-tail-lines 120] \
   [--runs-root /path/to/runs] [--artifacts-root /path/to/artifacts]
 
@@ -156,7 +157,10 @@ Sweep semantics:
 
 - `resume <name> <run_key>` continues a run from the first step not marked `succeeded`.
 - The command records resume attempts in `run.json` (`attempt`, `resumed_at_utc`, `resumed_from_step`).
-- By default, resume refuses spec drift and already-succeeded runs unless `--allow-spec-drift` / `--force`.
+- Strict resume reuses the run's active stored spec and refuses spec drift.
+- Repair resume requires both `--repair-spec` and `--allow-config-drift ...`; it records the accepted repair in `run.json` and activates the repaired spec for later resumes.
+- `pending` repair drift also covers stored `skipped` steps that have not executed yet.
+- `--dry-run` prints the repair decision and diff summary without mutating run state or executing steps.
 ## Spec schema (minimal reference)
 
 - `name` (required): experiment name
